@@ -68,10 +68,26 @@ const commands = {
   },
   install: async () =>
     (await import('../core/install.mjs')).install({ claude: rest.includes('--claude'), codex: rest.includes('--codex'), home: inboxHome() }),
+  async uninstall() {
+    const { uninstallFrom } = await import('../core/install.mjs');
+    const { homedir } = await import('node:os');
+    const { join } = await import('node:path');
+    const targets = [];
+    if (rest.includes('--claude')) targets.push(join(homedir(), '.claude', 'settings.json'));
+    if (rest.includes('--codex')) targets.push(join(homedir(), '.codex', 'hooks.json'));
+    if (!targets.length) throw new Error('--claude, --codex 중 하나 이상을 지정하세요.');
+    for (const path of targets) {
+      const result = uninstallFrom(path);
+      console.log(`${result.changed ? '훅 제거' : '등록된 훅 없음'}: ${path}`);
+    }
+    await stopDaemon(inboxHome());
+    console.log(`데이터 폴더 ${inboxHome()}는 남겨 둡니다. 필요 없으면 직접 지우세요.`);
+  },
   help() {
     console.log(`approve-here <command>
 
   install --claude --codex  훅을 CLI 설정에 등록 (한 번)
+  uninstall --claude --codex  훅 제거
   tui                       이 터미널(tmux pane)을 대기함으로  ← 인자 없이 실행하면 이것
   app                       macOS 메뉴바 앱 (없으면 내려받음)
   open                      브라우저 대기함
