@@ -13,6 +13,11 @@ export const DEFAULTS = Object.freeze({
   policyHooks: { claude: [], codex: [] },
   // 내장 allowlist 정책 사용 여부.
   allowlist: true,
+  // 표면(메뉴바·TUI·웹)이 하나도 안 떠 있으면 훅은 기다리지 않고 바로 후퇴한다.
+  // Codex는 훅이 기다리는 동안 자기 프롬프트를 숨기므로, 볼 사람이 없는 대기는 사용자를 막는 것과 같다.
+  requireSurface: true,
+  // 표면이 마지막으로 다녀간 뒤 이 시간(초) 안이면 활성으로 본다.
+  presenceSeconds: 10,
 });
 
 export function inboxHome() {

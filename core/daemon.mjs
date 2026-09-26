@@ -20,20 +20,27 @@ class HttpError extends Error {
  * 로컬 대기함 데몬. 훅이 요청을 올리고 결정을 기다리며, 표면(메뉴바·TUI·웹)이 목록을 읽고 결정을 쓴다.
  * 127.0.0.1에만 묶고 같은 사용자만 읽을 수 있는 token 파일로 호출자를 가른다.
  */
-export async function startDaemon({ home, port, tmux = defaultTmux } = {}) {
+export async function startDaemon({ home, port, tmux = defaultTmux, presenceSeconds } = {}) {
   const root = ensureHome(home);
   const config = loadConfig(root);
   const token = ensureToken(root);
   const store = new Store(root);
   const listenPort = port ?? config.port;
+  const presenceMs = (presenceSeconds ?? config.presenceSeconds) * 1000;
+  let lastSurfaceAt = 0;
   const server = createServer((req, res) => handle(req, res).catch(error => fail(res, error)));
+
+  const surfaceActive = () => Date.now() - lastSurfaceAt < presenceMs;
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     const [, resource, id, action] = url.pathname.split('/');
-    if (req.method === 'GET' && url.pathname === '/health') return json(res, 200, { ok: true, pending: store.list(PENDING).length });
+    if (req.method === 'GET' && url.pathname === '/health')
+      return json(res, 200, { ok: true, pending: store.list(PENDING).length, surfaceActive: surfaceActive() });
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/assets/'))) return serveWeb(url.pathname, res);
     authorize(req, url);
+    // 훅이 아닌 인증된 호출은 전부 "표면이 보고 있다"는 신호다.
+    if (req.headers['x-agent-inbox-client'] !== 'hook') lastSurfaceAt = Date.now();
 
     if (resource === 'requests' && !id) {
       if (req.method === 'GET') return json(res, 200, store.list(url.searchParams.get('status') || PENDING));
@@ -88,7 +95,11 @@ export async function startDaemon({ home, port, tmux = defaultTmux } = {}) {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
     res.write(`event: snapshot\ndata: ${JSON.stringify(store.list(PENDING))}\n\n`);
     const unsubscribe = store.subscribe(event => res.write(`event: ${event.type}\ndata: ${JSON.stringify(event.request)}\n\n`));
-    const heartbeat = setInterval(() => res.write(': ping\n\n'), 15000);
+    // 열려 있는 SSE 연결은 표면이 계속 보고 있다는 뜻이다.
+    const heartbeat = setInterval(() => {
+      lastSurfaceAt = Date.now();
+      res.write(': ping\n\n');
+    }, Math.max(1000, presenceMs / 2));
     req.on('close', () => {
       clearInterval(heartbeat);
       unsubscribe();
@@ -124,6 +135,8 @@ function validateRequest(input) {
   if (typeof input.toolName !== 'string' || !input.toolName) throw new HttpError(400, 'toolName이 필요합니다.');
   if (input.status === 'auto' && !['allow', 'deny'].includes(input.decision?.behavior))
     throw new HttpError(400, 'auto 기록에는 decision.behavior가 필요합니다.');
+  if (input.status !== undefined && !['pending', 'auto', 'skipped'].includes(input.status))
+    throw new HttpError(400, 'status는 pending·auto·skipped 중 하나여야 합니다.');
   return input;
 }
 

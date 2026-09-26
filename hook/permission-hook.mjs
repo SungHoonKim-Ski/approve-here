@@ -32,6 +32,15 @@ async function main() {
 
   const client = apiClient(home, config);
   if (!client) return;
+  if (config.requireSurface !== false) {
+    const health = await client.get('/health');
+    if (!health?.ok) return;
+    if (!health.surfaceActive) {
+      // 볼 사람이 없으면 기다리지 않는다. 건너뛴 사실만 남겨 나중에 "왜 대기함에 안 왔나"를 답할 수 있게 한다.
+      await client.post('/requests', { ...request, status: 'skipped', decidedBy: 'no-surface' });
+      return;
+    }
+  }
   const created = await client.post('/requests', request);
   if (!created?.id) return;
   const deadline = Date.now() + config.waitSeconds * 1000;
@@ -91,7 +100,8 @@ function apiClient(home, config) {
   const token = readToken(home);
   if (!token) return null;
   const base = `http://127.0.0.1:${config.port}`;
-  const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json' };
+  // 훅의 호출은 "표면이 보고 있다"는 신호로 세지 않도록 자신을 밝힌다.
+  const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json', 'x-agent-inbox-client': 'hook' };
   const call = async (path, init, timeoutMs) => {
     try {
       const res = await fetch(base + path, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });

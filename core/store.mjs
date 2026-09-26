@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { ensureHome } from './config.mjs';
 
 export const PENDING = 'pending';
-const FINAL = new Set(['allowed', 'denied', 'expired', 'auto']);
+const FINAL = new Set(['allowed', 'denied', 'expired', 'auto', 'skipped']);
+const PRESET = new Set(['auto', 'skipped']);
 const RECENT_LIMIT = 100;
 
 /** 요청을 메모리에 들고 requests.jsonl에 사건 단위로 덧붙인다. 다시 읽어 복원하는 용도는 아니다. */
@@ -18,7 +19,7 @@ export class Store {
 
   create(input) {
     const now = new Date().toISOString();
-    const status = input.status === 'auto' ? 'auto' : PENDING;
+    const status = PRESET.has(input.status) ? input.status : PENDING;
     const record = Object.freeze({
       id: randomUUID(),
       provider: input.provider,
@@ -35,7 +36,7 @@ export class Store {
       tmux: input.tmux ?? null,
       status,
       decision: status === 'auto' ? input.decision ?? null : null,
-      decidedBy: status === 'auto' ? input.decidedBy ?? 'policy' : null,
+      decidedBy: status === 'auto' ? input.decidedBy ?? 'policy' : status === 'skipped' ? input.decidedBy ?? 'no-surface' : null,
       createdAt: now,
       updatedAt: now,
     });
