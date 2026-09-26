@@ -18,7 +18,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var notificationsGranted = false
   private let work = DispatchQueue(label: "approve-here.runtime")
 
+  /// 이 번들이 /Applications 밖에 있고 /Applications에 사본이 있으면, 훅 경로를 이쪽으로 끌어오지 않는다(개발 빌드가 설치본을 덮지 않게).
+  private var yieldsToInstalled: Bool {
+    let installed = "/Applications/ApproveHere.app"
+    return !Bundle.main.bundlePath.hasPrefix(installed) && FileManager.default.fileExists(atPath: installed)
+  }
+
   func applicationDidFinishLaunching(_ notification: Notification) {
+    // 같은 앱이 이미 떠 있으면 이 인스턴스는 물러난다. 둘이 돌면 훅 경로를 서로 덮는다.
+    let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+    if !others.isEmpty {
+      Runtime.log("another instance running (\(others.map(\.processIdentifier))) — quitting \(Bundle.main.bundlePath)")
+      NSApp.terminate(nil)
+      return
+    }
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     item.menu = NSMenu()
     cards = CardPanelController(actions: .init(
@@ -49,8 +62,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       Runtime.log("node=\(found ?? "없음") \(found.map(Runtime.nodeVersion) ?? "")")
       DispatchQueue.main.async { self.node = found; self.render() }
       guard let found else { return }
+      if self.yieldsToInstalled {
+        Runtime.log("running outside /Applications while installed copy exists — leaving hooks alone")
+        DispatchQueue.main.async { self.notice = "Applications에 설치된 앱이 있어 이 사본은 훅을 건드리지 않습니다" }
+      }
       // 앱을 옮겼거나 node가 바뀌었거나 이벤트가 늘었으면 등록된 훅을 조용히 맞춘다.
-      for provider in Provider.allCases where HookConnections.isStale(provider, node: found) {
+      for provider in Provider.allCases where !self.yieldsToInstalled && HookConnections.isStale(provider, node: found) {
         try? HookConnections.connect(provider, node: found)
         DispatchQueue.main.async {
           self.notice = "\(provider.title) 훅을 갱신했습니다" + (provider == .codex ? " — Codex가 다음 실행에서 훅 신뢰를 다시 물어요" : "")
@@ -185,6 +202,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   @objc private func toggleConnection(_ sender: NSMenuItem) {
     guard let raw = sender.representedObject as? String, let provider = Provider(rawValue: raw), let node else { return }
+    if yieldsToInstalled {
+      notice = "Applications의 Approve Here에서 연결을 켜고 끄세요"
+      render()
+      return
+    }
     do {
       if HookConnections.isConnected(provider) {
         try HookConnections.disconnect(provider)
