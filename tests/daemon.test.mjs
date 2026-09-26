@@ -99,6 +99,24 @@ test('자동 처리(policy) 기록은 pending에 오르지 않고 recent에 남�
   assert.equal(recent[0].status, 'auto');
 });
 
+test('등록 시 tmux 창 이름을 붙이고 context를 보존한다', async t => {
+  const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  const daemon = await startDaemon({ home, port: 0, tmux: { jump: async () => ({ ok: true }), describe: async ({ pane }) => (pane === '%27' ? '결제-환불' : null) } });
+  t.after(() => daemon.close());
+  const headers = { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' };
+  const created = await (
+    await fetch(`http://127.0.0.1:${daemon.port}/requests`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ ...sample, context: { task: '환불 API 추가', latest: '테스트도 돌려' } }),
+    })
+  ).json();
+  const record = await (await fetch(`http://127.0.0.1:${daemon.port}/requests/${created.id}`, { headers })).json();
+  assert.equal(record.tmux.title, '결제-환불');
+  assert.equal(record.tmux.pane, '%27');
+  assert.deepEqual(record.context, { task: '환불 API 추가', latest: '테스트도 돌려' });
+});
+
 test('jump는 tmux 어댑터를 부른다', async t => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   const calls = [];

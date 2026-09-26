@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { join } from 'node:path';
-import { ensureHome, inboxHome, loadConfig, readDaemonInfo, readToken } from './config.mjs';
+import { ensureHome, inboxHome, loadConfig, readDaemonInfo, readToken, writeDaemonInfo } from './config.mjs';
 
 const BIN = new URL('../bin/approve-here.mjs', import.meta.url).pathname;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -19,7 +19,11 @@ export async function daemonHealth(home = inboxHome()) {
       const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) });
       if (!res.ok) continue;
       const value = await res.json();
-      if (value.ok) return { ...value, port, pid: info?.port === port ? info.pid : value.pid ?? null };
+      if (!value.ok) continue;
+      const pid = info?.port === port ? info.pid : value.pid ?? null;
+      // 기록 없이 살아 있는 데몬을 인정했으면 기록을 복구한다 — 표면(앱·TUI)은 daemon.json으로 데몬을 찾는다.
+      if (info?.port !== port) writeDaemonInfo(home, { pid, port, startedAt: new Date().toISOString(), adopted: true });
+      return { ...value, port, pid };
     } catch {}
   }
   return null;

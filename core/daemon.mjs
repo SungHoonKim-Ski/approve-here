@@ -65,7 +65,7 @@ export async function startDaemon({
 
     if (resource === 'requests' && !id) {
       if (req.method === 'GET') return json(res, 200, store.list(url.searchParams.get('status') || PENDING));
-      if (req.method === 'POST') return json(res, 201, { id: store.create(validateRequest(await body(req))).id });
+      if (req.method === 'POST') return json(res, 201, { id: store.create(await describeTmux(validateRequest(await body(req)))).id });
     }
     if (resource === 'requests' && id) {
       const record = store.get(id);
@@ -99,6 +99,13 @@ export async function startDaemon({
       return;
     }
     throw new HttpError(404, '알 수 없는 경로입니다.');
+  }
+
+  /** tmux 창 이름은 그 세션이 무슨 일인지 말해 준다(작업 이름으로 창을 짓는 사람이 많다). 훅은 pane id만 아니까 여기서 붙인다. */
+  async function describeTmux(input) {
+    if (!input.tmux?.pane || typeof tmux.describe !== 'function') return input;
+    const title = await tmux.describe({ pane: input.tmux.pane }).catch(() => null);
+    return title ? { ...input, tmux: { ...input.tmux, title } } : input;
   }
 
   function authorize(req, url) {

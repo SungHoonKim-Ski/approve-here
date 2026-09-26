@@ -91,6 +91,22 @@ test('질문 카드에는 allow/deny를 보낼 수 없고, 권한 카드에는 a
   assert.equal((await api(`/requests/${permission.id}/decision`, { method: 'POST', body: JSON.stringify({ answers: { q: 'a' } }) })).status, 400);
 });
 
+test('AskUserQuestion의 PermissionRequest(질문 띄울 권한)는 묻지 않고 allow한다 — 질문 하나에 카드 두 장이 뜨지 않게', async t => {
+  const { home, api } = await bootDaemon(t);
+  const permission = { ...askInput, hook_event_name: 'PermissionRequest' };
+  delete permission.tool_use_id;
+  const r = await runHook(JSON.stringify(permission), { APPROVE_HERE_HOME: home });
+  assert.equal(r.code, 0);
+  const out = JSON.parse(r.stdout).hookSpecificOutput;
+  assert.equal(out.hookEventName, 'PermissionRequest');
+  assert.equal(out.decision.behavior, 'allow');
+  assert.equal((await (await api('/requests?status=pending')).json()).length, 0);
+  await new Promise(r => setTimeout(r, 100));
+  const recent = await (await api('/requests?status=recent')).json();
+  assert.equal(recent[0].status, 'auto');
+  assert.equal(recent[0].decidedBy, 'question-tool');
+});
+
 test('AskUserQuestion이 아닌 PreToolUse는 우리 일이 아니다 — 즉시 조용히 끝난다', async t => {
   const { home, api } = await bootDaemon(t);
   const r = await runHook(JSON.stringify({ ...askInput, tool_name: 'Bash', tool_input: { command: 'ls' } }), { APPROVE_HERE_HOME: home });

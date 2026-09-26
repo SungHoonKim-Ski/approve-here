@@ -2,7 +2,16 @@ import Foundation
 
 /// 데몬 API 클라이언트. 표면은 이 계약만 소비한다 — 판단 로직은 없다.
 struct PendingRequest: Decodable, Identifiable, Equatable {
-  struct Tmux: Decodable, Equatable { let pane: String? }
+  struct Tmux: Decodable, Equatable {
+    let pane: String?
+    let title: String?
+  }
+  struct Context: Decodable, Equatable {
+    let task: String?
+    let latest: String?
+    /// 질문 직전에 agent가 한 설명 — 질문의 배경.
+    let assistant: String?
+  }
   struct Option: Decodable, Equatable {
     let label: String
     let description: String?
@@ -24,8 +33,21 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
   let description: String?
   let createdAt: String
   let tmux: Tmux?
+  let context: Context?
 
   var isQuestion: Bool { kind == "question" }
+
+  /// 어느 세션인지 알아보는 한 줄: tmux 창 이름이 있으면 그것, 없으면 마지막 사용자 요청.
+  var sessionLine: String? {
+    if let title = tmux?.title, !title.isEmpty { return title }
+    return context?.latest ?? context?.task
+  }
+
+  /// 그 세션이 지금 하고 있는 일(마지막 사용자 요청). 창 이름과 같으면 생략.
+  var workingOn: String? {
+    guard let latest = context?.latest ?? context?.task, latest != tmux?.title else { return nil }
+    return latest
+  }
 
   var summary: String {
     if case .string(let command)? = toolInput["command"] { return command.replacingOccurrences(of: "\n", with: " ") }
@@ -68,15 +90,26 @@ final class InboxClient {
 
   init() { home = Runtime.home }
 
-  /// daemon.json·token은 데몬이 다시 뜨면 바뀔 수 있어 매번 읽는다.
+  /// daemon.json·token은 데몬이 다시 뜨면 바뀔 수 있어 매번 읽는다. 기록 파일이 없으면 설정 포트(기본 4400)로 붙는다.
   private func reload() -> Bool {
-    guard let data = try? Data(contentsOf: home.appendingPathComponent("daemon.json")),
-          let info = try? JSONDecoder().decode(DaemonInfo.self, from: data),
-          let tokenText = try? String(contentsOf: home.appendingPathComponent("token"), encoding: .utf8)
-    else { return false }
-    port = info.port
+    guard let tokenText = try? String(contentsOf: home.appendingPathComponent("token"), encoding: .utf8) else { return false }
     token = tokenText.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let data = try? Data(contentsOf: home.appendingPathComponent("daemon.json")),
+       let info = try? JSONDecoder().decode(DaemonInfo.self, from: data) {
+      port = info.port
+    } else {
+      port = configuredPort()
+    }
     return true
+  }
+
+  private func configuredPort() -> Int {
+    if let data = try? Data(contentsOf: home.appendingPathComponent("config.json")),
+       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+       let value = json["port"] as? Int, value > 0 {
+      return value
+    }
+    return 4400
   }
 
   private func request(_ path: String, method: String = "GET", body: [String: Any]? = nil) async throws -> Data {
@@ -106,12 +139,12 @@ final class InboxClient {
     _ = try await request("/requests/\(id)/decision", method: "POST", body: body)
   }
 
-  /// 질문 카드의 답. {질문 원문: 고른 라벨}. multiSelect는 라벨을 ", "로 잇는다.
+  /// 질문 카드의 답. {질문 원문: 고른 라벨 또는 직접 입력}. multiSelect는 라벨을 ", "로 잇는다.
   func answer(_ id: String, answers: [String: String]) async throws {
     _ = try await request("/requests/\(id)/decision", method: "POST", body: ["answers": answers])
   }
 
-  /// 질문을 앱에서 답하지 않고 그 세션 터미널의 원래 다이얼로그로 넘긴다.
+  /// 질문을 앱에서 답하지 않고 그 세션의 원래 다이얼로그로 넘긴다.
   func passthrough(_ id: String) async throws {
     _ = try await request("/requests/\(id)/decision", method: "POST", body: ["passthrough": true])
   }

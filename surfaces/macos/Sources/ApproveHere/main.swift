@@ -38,7 +38,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       allow: { [weak self] r in self?.decide(r.id, "allow", nil) },
       allowRemember: { [weak self] r in self?.decide(r.id, "allow", r.commandPrefix) },
       deny: { [weak self] r in self?.decide(r.id, "deny", nil) },
-      jump: { [weak self] r in Task { try? await self?.client.jump(r.id) } },
       answer: { [weak self] r, answers in self?.answer(r.id, answers) },
       passthrough: { [weak self] r in self?.passthrough(r.id) }
     ))
@@ -87,7 +86,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         known.formUnion(next.map(\.id))
         pending = next
         cards.sync(next)
-        for request in fresh { notify(request) }
+        for request in fresh {
+          notify(request)
+          // 질문은 답이 있어야 세션이 이어진다 — 소리로 부른다. 승인 요청은 잦아서 소리 없이 카드만.
+          if request.isQuestion { NSSound(named: "Glass")?.play() }
+        }
       } catch {
         daemonUp = false
         pending = []
@@ -155,8 +158,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   private func requestMenu(_ request: PendingRequest) -> NSMenuItem {
     let label = request.isQuestion ? "질문" : request.toolName
-    let entry = NSMenuItem(title: "[\(request.provider)] \(request.project ?? "?") · \(label) · \(request.summary.prefix(50))", action: nil, keyEquivalent: "")
+    let who = [request.provider == "codex" ? "Codex" : "Claude Code", request.project ?? "?", request.tmux?.title].compactMap { $0 }.joined(separator: " · ")
+    let entry = NSMenuItem(title: "\(who) · \(label) · \(request.summary.prefix(40))", action: nil, keyEquivalent: "")
     let sub = NSMenu()
+    if let working = request.workingOn { sub.addItem(disabled("지금: \(working.prefix(90))")); sub.addItem(.separator()) }
     if request.isQuestion {
       for q in request.questions ?? [] {
         sub.addItem(disabled(String(q.question.prefix(90))))
@@ -168,11 +173,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             sub.addItem(pick)
           }
         } else {
-          sub.addItem(disabled("   → 화면 오른쪽 위 카드에서 고르세요"))
+          sub.addItem(disabled("   → 카드에서 고르세요"))
         }
       }
       sub.addItem(.separator())
-      sub.addItem(requestAction("터미널에서 답하기", #selector(passthroughItem(_:)), request))
+      sub.addItem(requestAction("카드 다시 열기", #selector(reopenCard(_:)), request))
     } else {
       if let description = request.description {
         sub.addItem(disabled(String(description.prefix(90))))
@@ -182,7 +187,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       if let prefix = request.commandPrefix { sub.addItem(requestAction("허용 + \"\(prefix)\" 앞으로 자동", #selector(allowRemember(_:)), request)) }
       sub.addItem(requestAction("거부", #selector(deny(_:)), request))
     }
-    if request.tmux?.pane != nil { sub.addItem(requestAction("그 tmux 창으로", #selector(jump(_:)), request)) }
+    if request.tmux?.pane != nil { sub.addItem(requestAction("요청한 tmux 창으로 이동", #selector(jump(_:)), request)) }
     entry.submenu = sub
     return entry
   }
@@ -259,7 +264,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     guard let parts = sender.representedObject as? [String], parts.count == 3 else { return }
     answer(parts[0], [parts[1]: parts[2]])
   }
-  @objc private func passthroughItem(_ sender: NSMenuItem) { passthrough(sender.representedObject as? String) }
+  @objc private func reopenCard(_ sender: NSMenuItem) {
+    guard let id = sender.representedObject as? String else { return }
+    Task { @MainActor in
+      cards.unhide(id)
+      poll()
+    }
+  }
 
   private func decide(_ id: String?, _ behavior: String, _ remember: String?) {
     guard let id else { return }

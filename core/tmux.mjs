@@ -18,10 +18,11 @@ export async function jump({ pane }) {
   return selected.ok ? { ok: true, note: '붙어 있는 tmux 클라이언트가 없어 창만 선택했습니다.' } : switched;
 }
 
+/** 창 이름만 돌려준다. 세션:창.pane 같은 좌표는 사람이 읽는 배경으로는 쓸모가 없다. */
 export async function describe({ pane }) {
   if (!pane) return null;
-  const result = await tmux(['display-message', '-p', '-t', pane, '#S:#I.#P #{window_name}']);
-  return result.ok ? result.stdout : null;
+  const result = await tmux(['display-message', '-p', '-t', pane, '#{window_name}']);
+  return result.ok && result.stdout ? result.stdout : null;
 }
 
 export const defaultTmux = { jump, describe };

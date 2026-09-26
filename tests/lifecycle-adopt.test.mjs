@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startDaemon } from '../core/daemon.mjs';
@@ -19,6 +19,9 @@ test('daemon.json이 사라져도 설정 포트에 데몬이 살아 있으면 �
   const result = await ensureDaemon({ home });
   assert.equal(result.started, false);
   assert.equal(result.port, daemon.port);
+  const restored = JSON.parse(readFileSync(join(home, 'daemon.json'), 'utf8'));
+  assert.equal(restored.port, daemon.port, '인정하면서 daemon.json을 복구한다 — 표면이 이 파일로 데몬을 찾는다');
+  assert.equal(restored.adopted, true);
 });
 
 test('/shutdown은 토큰이 있어야 하고, 받으면 onShutdown을 부른다', async t => {

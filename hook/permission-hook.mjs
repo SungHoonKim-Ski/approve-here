@@ -12,6 +12,7 @@
  */
 import { inboxHome, loadConfig, readToken, readAllowlist } from '../core/config.mjs';
 import { allowlistDecision, runPolicyHooks } from '../core/policy.mjs';
+import { sessionContext } from '../core/transcript.mjs';
 
 const CONNECT_TIMEOUT_MS = 2000;
 const POLL_SECONDS = 25;
@@ -28,7 +29,23 @@ async function main() {
   const question = input.hook_event_name === 'PreToolUse' && input.tool_name === 'AskUserQuestion';
   if (input.hook_event_name === 'PreToolUse' && !question) return; // 다른 PreToolUse는 우리 일이 아니다
 
+  // "질문을 띄울 권한"은 묻지 않는다. 질문 자체는 PreToolUse 카드(또는 원래 다이얼로그)가 받는다.
+  // 여기서 한 번 더 물으면 질문 하나에 카드가 두 장 뜬다.
+  if (input.hook_event_name === 'PermissionRequest' && input.tool_name === 'AskUserQuestion') {
+    const decision = { behavior: 'allow', message: '질문은 카드에서 답합니다' };
+    emitPermission(decision);
+    await record(home, config, { ...toRequest(input, provider), status: 'auto', decision, decidedBy: 'question-tool' });
+    return;
+  }
+
   const request = question ? toQuestionRequest(input, provider) : toRequest(input, provider);
+  if (question && !request.context?.assistant) {
+    // transcript는 비동기로 쓰여서 질문 직전 설명이 아직 없을 수 있다. 잠깐 기다려 다시 읽는다(최대 1.5초).
+    for (let i = 0; i < 3 && !request.context?.assistant; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      request.context = sessionContext(input.transcript_path) ?? request.context;
+    }
+  }
 
   if (!question) {
     const policy = await decideByPolicy(request, raw, config, home);
@@ -90,6 +107,8 @@ function common(input, provider) {
     permissionMode: input.permission_mode ?? null,
     model: input.model ?? null,
     tmux: process.env.TMUX_PANE ? { pane: process.env.TMUX_PANE, socket: process.env.TMUX ?? null } : null,
+    // 이 세션이 무슨 일을 하고 있나 — 카드에서 어느 세션인지 알아보는 배경.
+    context: sessionContext(input.transcript_path),
   };
 }
 

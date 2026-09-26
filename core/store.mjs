@@ -37,6 +37,7 @@ export class Store {
       permissionMode: input.permissionMode ?? null,
       model: input.model ?? null,
       tmux: input.tmux ?? null,
+      context: input.context ?? null,
       status,
       decision: status === 'auto' ? input.decision ?? null : null,
       decidedBy: status === 'auto' ? input.decidedBy ?? 'policy' : status === 'skipped' ? input.decidedBy ?? 'no-surface' : null,
@@ -120,7 +121,8 @@ export class Store {
     for (const listener of this.listeners) listener({ type: kind, request: record });
   }
 
-  append(kind, record) {
-    appendFileSync(join(this.home, 'requests.jsonl'), JSON.stringify({ at: new Date().toISOString(), kind, ...record }) + '\n');
+  /** 사건 이름은 event에 둔다 — record.kind(permission/question)와 이름이 겹쳐 덮어쓰였다. */
+  append(event, record) {
+    appendFileSync(join(this.home, 'requests.jsonl'), JSON.stringify({ at: new Date().toISOString(), event, ...record }) + '\n');
   }
 }
