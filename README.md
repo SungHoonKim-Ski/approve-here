@@ -147,10 +147,6 @@ Claude Code / Codex ── PermissionRequest ──▶ hook/permission-hook.mjs
 - 원격 접속·계정·클라우드가 없습니다. 127.0.0.1과 같은 사용자만 읽을 수 있는 token 파일이 전부입니다.
 - 메뉴바 앱은 Apple 서명·공증이 없습니다. `approve-here app`이 내려받은 경우는 그대로 열리고, 브라우저로 직접 내려받은 경우는 처음 한 번 시스템 설정 → 개인정보 보호 및 보안에서 허용해야 합니다.
 
-## 비슷한 도구
-
-[PermPilot](https://github.com/Everaldtah/permpilot)(Windows, PreToolUse 훅 큐), [many-ai-cli](https://github.com/ishizakahiroshi/many-ai-cli)(PTY 래퍼 + 브라우저 허브), [Mux Beacon](https://github.com/Lukeesec/mux-beacon)(macOS 메뉴바, tmux 점프), [parley](https://github.com/AzarudeenshariffA/parley)(여러 agent 공통 allow-list). 대기함 자체는 이들과 같은 자리입니다. Approve Here가 다른 점은 **기존 정책 훅을 훅 프로세스 안에서 먼저 실행해 그 뒤에 서고, 결정을 다시 정책(allowlist)으로 돌려보내는 것**, 그리고 Claude Code와 Codex를 훅 계약 하나로 받는 것입니다.
-
 ## 개발
 
 ```bash
