@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, existsSync } from 'node:fs';
+import { mkdtempSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startDaemon } from '../core/daemon.mjs';
@@ -8,6 +8,7 @@ import { ensureDaemon, daemonHealth, stopDaemon } from '../core/lifecycle.mjs';
 
 test('ensureDaemon: 데몬이 없으면 분리 실행으로 띄우고 health가 응답할 때까지 기다린다. 두 번째 호출은 재사용', async t => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 0 }));
   t.after(() => stopDaemon(home));
   const first = await ensureDaemon({ home, port: 0 });
   assert.equal(first.started, true);
@@ -22,6 +23,7 @@ test('ensureDaemon: 데몬이 없으면 분리 실행으로 띄우고 health가 
 
 test('stopDaemon: daemon.json의 pid를 종료하고 health가 끊긴다', async () => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 0 }));
   await ensureDaemon({ home, port: 0 });
   assert.equal((await daemonHealth(home))?.ok, true);
   const stopped = await stopDaemon(home);

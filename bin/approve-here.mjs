@@ -20,6 +20,10 @@ const commands = {
         console.log('표면도 대기 요청도 없어 데몬을 닫습니다.');
         stop();
       },
+      onShutdown: () => {
+        console.log('종료 요청을 받았습니다.');
+        stop();
+      },
     });
     console.log(`approve-here daemon · http://127.0.0.1:${daemon.port} · 데이터 ${home}`);
     process.on('SIGINT', stop);

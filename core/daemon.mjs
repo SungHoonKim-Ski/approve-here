@@ -28,6 +28,7 @@ export async function startDaemon({
   idleExitMs,
   idleCheckMs = 30000,
   onIdle = () => {},
+  onShutdown = () => {},
 } = {}) {
   const root = ensureHome(home);
   const config = loadConfig(root);
@@ -56,7 +57,7 @@ export async function startDaemon({
     const url = new URL(req.url, 'http://127.0.0.1');
     const [, resource, id, action] = url.pathname.split('/');
     if (req.method === 'GET' && url.pathname === '/health')
-      return json(res, 200, { ok: true, pending: store.list(PENDING).length, surfaceActive: surfaceActive() });
+      return json(res, 200, { ok: true, pid: process.pid, pending: store.list(PENDING).length, surfaceActive: surfaceActive() });
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/assets/'))) return serveWeb(url.pathname, res);
     authorize(req, url);
     // 훅이 아닌 인증된 호출은 전부 "표면이 보고 있다"는 신호다.
@@ -92,6 +93,11 @@ export async function startDaemon({
       }
     }
     if (resource === 'events' && req.method === 'GET') return stream(req, res);
+    if (resource === 'shutdown' && req.method === 'POST') {
+      json(res, 200, { ok: true });
+      setTimeout(() => onShutdown(), 50);
+      return;
+    }
     throw new HttpError(404, '알 수 없는 경로입니다.');
   }
 

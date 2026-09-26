@@ -140,10 +140,13 @@ function summary(r) {
   return `${r.toolName} ${JSON.stringify(r.toolInput)}`;
 }
 
+// 되돌릴 수 없는 명령은 접두로 기억시키지 않는다.
+const NEVER_REMEMBER = new Set(['rm', 'sudo', 'dd', 'mkfs', 'kill', 'killall', 'shutdown', 'reboot', 'chmod', 'chown', 'curl', 'wget']);
 function commandPrefix(r) {
   const command = r.toolInput?.command;
   if (typeof command !== 'string') return null;
   const words = command.trim().split(/\s+/);
+  if (NEVER_REMEMBER.has(words[0])) return null;
   return words.slice(0, Math.min(2, words.length)).join(' ');
 }
 

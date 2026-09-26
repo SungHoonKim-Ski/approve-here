@@ -34,11 +34,15 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
     return toolName
   }
 
+  /// "앞으로 자동"에 쓸 명령 접두. 되돌릴 수 없는 명령은 접두로 기억시키지 않는다 — 버튼 자체를 내놓지 않는다.
   var commandPrefix: String? {
     guard case .string(let command)? = toolInput["command"] else { return nil }
     let words = command.split(separator: " ").map(String.init)
+    guard let first = words.first, !PendingRequest.neverRemember.contains(first) else { return nil }
     return words.prefix(2).joined(separator: " ")
   }
+
+  static let neverRemember: Set<String> = ["rm", "sudo", "dd", "mkfs", "kill", "killall", "shutdown", "reboot", "chmod", "chown", "curl", "wget"]
 }
 
 /// tool_input은 도구마다 모양이 달라 느슨하게 받는다.

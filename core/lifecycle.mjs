@@ -1,23 +1,28 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { join } from 'node:path';
-import { ensureHome, inboxHome, readDaemonInfo } from './config.mjs';
+import { ensureHome, inboxHome, loadConfig, readDaemonInfo, readToken } from './config.mjs';
 
 const BIN = new URL('../bin/approve-here.mjs', import.meta.url).pathname;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-/** daemon.json이 가리키는 데몬이 실제로 응답하면 health를, 아니면 null을 돌려준다. 기록만 남은 죽은 데몬은 null이다. */
+/**
+ * 살아 있는 데몬의 health를, 없으면 null을 돌려준다. daemon.json이 가리키는 포트를 먼저 보고,
+ * 기록이 없거나 죽었으면 설정 포트도 본다 — 기록 파일이 사라졌다고 멀쩡히 듣고 있는 데몬을 모른 척하면
+ * 새 데몬이 EADDRINUSE로 죽고 아무도 못 붙는다.
+ */
 export async function daemonHealth(home = inboxHome()) {
   const info = readDaemonInfo(home);
-  if (!info?.port) return null;
-  try {
-    const res = await fetch(`http://127.0.0.1:${info.port}/health`, { signal: AbortSignal.timeout(1500) });
-    if (!res.ok) return null;
-    const value = await res.json();
-    return value.ok ? { ...value, port: info.port, pid: info.pid } : null;
-  } catch {
-    return null;
+  const candidates = [...new Set([info?.port, loadConfig(home).port].filter(Boolean))];
+  for (const port of candidates) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) });
+      if (!res.ok) continue;
+      const value = await res.json();
+      if (value.ok) return { ...value, port, pid: info?.port === port ? info.pid : value.pid ?? null };
+    } catch {}
   }
+  return null;
 }
 
 /**
@@ -42,16 +47,29 @@ export async function ensureDaemon({ home = inboxHome(), port, waitMs = 8000 } =
     await sleep(100);
     const health = await daemonHealth(root);
     if (health && health.pid === child.pid) return { started: true, port: health.port, pid: child.pid };
+    // 우리가 띄운 자식이 EADDRINUSE로 죽었어도 그 포트에 다른 데몬이 살아 있으면 그것을 쓴다.
+    if (health && child.exitCode !== null) return { started: false, port: health.port, pid: health.pid };
   }
   throw new Error(`데몬이 ${waitMs / 1000}초 안에 응답하지 않았습니다. ${join(root, 'daemon.log')}를 확인하세요.`);
 }
 
+/** pid 기록이 있으면 SIGTERM, 없으면 데몬 자신에게 /shutdown을 요청한다. */
 export async function stopDaemon(home = inboxHome()) {
-  const info = readDaemonInfo(home);
-  if (!info?.pid) return false;
+  const health = await daemonHealth(home);
+  if (!health) return false;
+  if (health.pid) {
+    try {
+      process.kill(health.pid, 'SIGTERM');
+      return true;
+    } catch {}
+  }
   try {
-    process.kill(info.pid, 'SIGTERM');
-    return true;
+    const res = await fetch(`http://127.0.0.1:${health.port}/shutdown`, {
+      method: 'POST',
+      headers: { 'x-approve-here-token': readToken(home) ?? '' },
+      signal: AbortSignal.timeout(2000),
+    });
+    return res.ok;
   } catch {
     return false;
   }

@@ -30,6 +30,7 @@ final class CardPanelController {
     hidden = hidden.intersection(ids)
     for request in pending where panels[request.id] == nil && !hidden.contains(request.id) {
       panels[request.id] = makePanel(for: request)
+      Runtime.log("card shown \(request.id) visible=\(panels[request.id]!.isVisible) frame=\(panels[request.id]!.frame)")
     }
     layout(order: pending.map(\.id))
   }
@@ -37,7 +38,8 @@ final class CardPanelController {
   private func makePanel(for request: PendingRequest) -> NSPanel {
     let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 10),
                         styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
-    panel.level = .floating
+    // 전체화면 Space의 앱 위에도 떠야 한다. .floating은 전체화면 창 아래로 깔린다.
+    panel.level = .statusBar
     panel.isOpaque = false
     panel.backgroundColor = .clear
     panel.hasShadow = true
@@ -51,15 +53,22 @@ final class CardPanelController {
       self.panels.removeValue(forKey: request.id)
     })
     let hosting = NSHostingView(rootView: view)
-    hosting.setFrameSize(hosting.fittingSize)
     panel.contentView = hosting
-    panel.setContentSize(NSSize(width: width, height: max(hosting.fittingSize.height, 80)))
+    let height = max(hosting.fittingSize.height, 96)
+    panel.setContentSize(NSSize(width: width, height: height))
+    panel.isReleasedWhenClosed = false
     panel.orderFrontRegardless()
     return panel
   }
 
   private func layout(order: [String]) {
-    guard let screen = NSScreen.main else { return }
+    // 사용자가 보고 있는 화면 = 마우스 커서가 있는 화면. accessory 앱은 NSScreen.main을 믿을 수 없다(키 윈도우가 없다).
+    let mouse = NSEvent.mouseLocation
+    // 커서가 화면 가장자리에 정확히 걸치면 contains가 빠뜨린다. 1pt 넉넉히 본다.
+    guard let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) ?? NSScreen.screens.first else {
+      Runtime.log("card layout: screen 없음")
+      return
+    }
     let frame = screen.visibleFrame
     var top = frame.maxY - 12
     for id in order {
@@ -67,6 +76,9 @@ final class CardPanelController {
       let size = panel.frame.size
       panel.setFrameOrigin(NSPoint(x: frame.maxX - size.width - 12, y: top - size.height))
       top -= size.height + 10
+    }
+    if !order.isEmpty {
+      Runtime.log("card layout screens=\(NSScreen.screens.count) visible=\(frame) frames=\(order.compactMap { panels[$0]?.frame })")
     }
   }
 }
