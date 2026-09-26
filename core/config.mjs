@@ -21,7 +21,7 @@ export const DEFAULTS = Object.freeze({
 });
 
 export function inboxHome() {
-  return process.env.AGENT_INBOX_HOME || join(homedir(), '.agent-inbox');
+  return process.env.APPROVE_HERE_HOME || join(homedir(), '.approve-here');
 }
 
 export function ensureHome(home = inboxHome()) {

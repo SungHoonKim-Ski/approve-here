@@ -27,9 +27,9 @@ test('health는 표면이 최근에 다녀갔는지(surfaceActive)를 알려준�
   const token = daemon.token;
   const health = async () => (await fetch(`${base}/health`)).json();
   assert.equal((await health()).surfaceActive, false);
-  await fetch(`${base}/requests`, { headers: { 'x-agent-inbox-token': token, 'x-agent-inbox-client': 'hook' } });
+  await fetch(`${base}/requests`, { headers: { 'x-approve-here-token': token, 'x-approve-here-client': 'hook' } });
   assert.equal((await health()).surfaceActive, false, '훅의 조회는 표면 존재로 세지 않는다');
-  await fetch(`${base}/requests`, { headers: { 'x-agent-inbox-token': token } });
+  await fetch(`${base}/requests`, { headers: { 'x-approve-here-token': token } });
   assert.equal((await health()).surfaceActive, true);
   await new Promise(r => setTimeout(r, 1200));
   assert.equal((await health()).surfaceActive, false, 'presenceSeconds가 지나면 비활성');
@@ -41,11 +41,11 @@ test('표면이 없으면 훅은 데몬이 떠 있어도 기다리지 않고 즉
   t.after(() => daemon.close());
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 30 }));
   const t0 = Date.now();
-  const r = await runHook({ AGENT_INBOX_HOME: home });
+  const r = await runHook({ APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
   assert.equal(r.stdout.trim(), '');
   assert.ok(Date.now() - t0 < 3000, '표면이 없으면 대기하지 않는다');
-  const headers = { 'x-agent-inbox-token': daemon.token };
+  const headers = { 'x-approve-here-token': daemon.token };
   const recent = await (await fetch(`http://127.0.0.1:${daemon.port}/requests?status=recent`, { headers })).json();
   assert.equal(recent[0]?.status, 'skipped', '표면 부재로 건너뛴 기록은 남긴다');
 });
@@ -56,7 +56,7 @@ test('requireSurface=false면 표면이 없어도 기다린다', async t => {
   t.after(() => daemon.close());
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 0.5, requireSurface: false }));
   const t0 = Date.now();
-  const r = await runHook({ AGENT_INBOX_HOME: home });
+  const r = await runHook({ APPROVE_HERE_HOME: home });
   assert.equal(r.stdout.trim(), '');
   assert.ok(Date.now() - t0 >= 450, 'waitSeconds만큼 기다린 뒤 후퇴');
 });

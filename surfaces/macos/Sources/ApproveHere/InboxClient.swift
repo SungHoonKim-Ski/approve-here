@@ -47,8 +47,8 @@ final class InboxClient {
   private var token: String?
 
   init() {
-    let env = ProcessInfo.processInfo.environment["AGENT_INBOX_HOME"]
-    home = env.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".agent-inbox")
+    let env = ProcessInfo.processInfo.environment["APPROVE_HERE_HOME"]
+    home = env.map { URL(fileURLWithPath: $0) } ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".approve-here")
   }
 
   /// daemon.json·token은 데몬이 다시 뜨면 바뀔 수 있어 매번 읽는다.
@@ -67,7 +67,7 @@ final class InboxClient {
     var req = URLRequest(url: URL(string: "http://127.0.0.1:\(port)\(path)")!)
     req.httpMethod = method
     req.timeoutInterval = 5
-    req.setValue(token, forHTTPHeaderField: "x-agent-inbox-token")
+    req.setValue(token, forHTTPHeaderField: "x-approve-here-token")
     if let body {
       req.setValue("application/json", forHTTPHeaderField: "content-type")
       req.httpBody = try JSONSerialization.data(withJSONObject: body)

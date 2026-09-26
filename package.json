@@ -1,5 +1,5 @@
 {
-  "name": "agent-inbox",
+  "name": "approve-here",
   "version": "0.1.0",
   "description": "여러 Claude Code·Codex 세션의 승인 요청을 한 자리에서 처리하는 로컬 대기함. 훅 계약만 사용하며 판단은 사용자 정책이 갖는다.",
   "type": "module",
@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "bin": {
-    "agent-inbox": "bin/agent-inbox.mjs"
+    "approve-here": "bin/approve-here.mjs"
   },
   "files": [
     "bin/",
@@ -19,7 +19,7 @@
     "README.md"
   ],
   "scripts": {
-    "start": "node bin/agent-inbox.mjs start",
+    "start": "node bin/approve-here.mjs start",
     "test": "node --test --test-timeout=15000 tests/*.test.mjs"
   }
 }

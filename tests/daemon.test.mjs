@@ -10,7 +10,7 @@ async function boot(t) {
   const daemon = await startDaemon({ home, port: 0, tmux: { jump: async () => ({ ok: true }) } });
   t.after(() => daemon.close());
   const base = `http://127.0.0.1:${daemon.port}`;
-  const headers = { 'x-agent-inbox-token': daemon.token, 'content-type': 'application/json' };
+  const headers = { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' };
   const api = (path, init = {}) => fetch(base + path, { ...init, headers: { ...headers, ...(init.headers || {}) } });
   return { home, daemon, api };
 }
@@ -104,7 +104,7 @@ test('jump는 tmux 어댑터를 부른다', async t => {
   const calls = [];
   const daemon = await startDaemon({ home, port: 0, tmux: { jump: async target => (calls.push(target), { ok: true }) } });
   t.after(() => daemon.close());
-  const headers = { 'x-agent-inbox-token': daemon.token, 'content-type': 'application/json' };
+  const headers = { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' };
   const created = await (
     await fetch(`http://127.0.0.1:${daemon.port}/requests`, { method: 'POST', headers, body: JSON.stringify(sample) })
   ).json();

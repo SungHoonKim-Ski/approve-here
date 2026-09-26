@@ -101,7 +101,7 @@ function apiClient(home, config) {
   if (!token) return null;
   const base = `http://127.0.0.1:${config.port}`;
   // 훅의 호출은 "표면이 보고 있다"는 신호로 세지 않도록 자신을 밝힌다.
-  const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json', 'x-agent-inbox-client': 'hook' };
+  const headers = { 'x-approve-here-token': token, 'content-type': 'application/json', 'x-approve-here-client': 'hook' };
   const call = async (path, init, timeoutMs) => {
     try {
       const res = await fetch(base + path, { ...init, headers, signal: AbortSignal.timeout(timeoutMs) });

@@ -11,11 +11,11 @@ const home = inboxHome();
 const info = readDaemonInfo(home);
 const token = readToken(home);
 if (!info || !token) {
-  console.error('데몬이 실행 중이 아닙니다. `agent-inbox start`로 시작하세요.');
+  console.error('데몬이 실행 중이 아닙니다. `approve-here start`로 시작하세요.');
   process.exit(1);
 }
 const base = `http://127.0.0.1:${info.port}`;
-const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json' };
+const headers = { 'x-approve-here-token': token, 'content-type': 'application/json' };
 
 let pending = [];
 let recent = [];
@@ -110,7 +110,7 @@ function render() {
   const width = process.stdout.columns || 100;
   const lines = [];
   const state = connected ? `${pending.length}건 대기` : '데몬 연결 끊김 — 재시도 중';
-  lines.push(`agent-inbox  ${state}`.padEnd(width));
+  lines.push(`approve-here  ${state}`.padEnd(width));
   lines.push('─'.repeat(Math.min(width, 120)));
   if (!pending.length) lines.push('  대기 중인 승인 요청이 없습니다.');
   pending.forEach((r, i) => {

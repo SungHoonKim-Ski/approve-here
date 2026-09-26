@@ -40,7 +40,7 @@ export async function startDaemon({ home, port, tmux = defaultTmux, presenceSeco
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/assets/'))) return serveWeb(url.pathname, res);
     authorize(req, url);
     // 훅이 아닌 인증된 호출은 전부 "표면이 보고 있다"는 신호다.
-    if (req.headers['x-agent-inbox-client'] !== 'hook') lastSurfaceAt = Date.now();
+    if (req.headers['x-approve-here-client'] !== 'hook') lastSurfaceAt = Date.now();
 
     if (resource === 'requests' && !id) {
       if (req.method === 'GET') return json(res, 200, store.list(url.searchParams.get('status') || PENDING));
@@ -76,7 +76,7 @@ export async function startDaemon({ home, port, tmux = defaultTmux, presenceSeco
   }
 
   function authorize(req, url) {
-    const given = req.headers['x-agent-inbox-token'] || url.searchParams.get('token');
+    const given = req.headers['x-approve-here-token'] || url.searchParams.get('token');
     if (given !== token) throw new HttpError(401, '토큰이 없거나 다릅니다.');
   }
 
@@ -174,7 +174,7 @@ function json(res, status, value) {
 
 function fail(res, error) {
   const status = error instanceof HttpError ? error.status : 500;
-  if (status === 500) console.error('[agent-inbox]', error);
+  if (status === 500) console.error('[approve-here]', error);
   if (!res.headersSent) json(res, status, { error: error.message });
   else res.end();
 }

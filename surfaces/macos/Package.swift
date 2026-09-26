@@ -2,9 +2,9 @@
 import PackageDescription
 
 let package = Package(
-  name: "AgentInbox",
+  name: "ApproveHere",
   platforms: [.macOS(.v13)],
   targets: [
-    .executableTarget(name: "AgentInbox", path: "Sources/AgentInbox")
+    .executableTarget(name: "ApproveHere", path: "Sources/ApproveHere")
   ]
 )

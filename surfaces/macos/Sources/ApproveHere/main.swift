@@ -42,10 +42,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   private func render() {
     item.button?.title = daemonUp ? (pending.isEmpty ? "✓" : "⏳ \(pending.count)") : "⏸"
-    item.button?.toolTip = daemonUp ? "agent-inbox · \(pending.count)건 대기" : "agent-inbox · 데몬 연결 안 됨"
+    item.button?.toolTip = daemonUp ? "approve-here · \(pending.count)건 대기" : "approve-here · 데몬 연결 안 됨"
     let menu = NSMenu()
     if !daemonUp {
-      menu.addItem(withTitle: "데몬 연결 안 됨 — `agent-inbox start`", action: nil, keyEquivalent: "")
+      menu.addItem(withTitle: "데몬 연결 안 됨 — `approve-here start`", action: nil, keyEquivalent: "")
     } else if pending.isEmpty {
       menu.addItem(withTitle: "대기 중인 승인 요청 없음", action: nil, keyEquivalent: "")
     }

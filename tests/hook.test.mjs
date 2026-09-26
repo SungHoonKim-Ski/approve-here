@@ -26,7 +26,7 @@ async function bootDaemon(t, config = {}) {
   const daemon = await startDaemon({ home, port: 0 });
   t.after(() => daemon.close());
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 5, ...config }));
-  const headers = { 'x-agent-inbox-token': daemon.token, 'content-type': 'application/json' };
+  const headers = { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' };
   const api = (path, init = {}) => fetch(`http://127.0.0.1:${daemon.port}${path}`, { ...init, headers }).then(r => r.json());
   return { home, daemon, api };
 }
@@ -44,14 +44,14 @@ const claudeInput = JSON.stringify({
 test('데몬이 없으면 아무 결정도 내지 않고 exit 0 (터미널 프롬프트로 후퇴)', async () => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 1, waitSeconds: 1 }));
-  const r = await runHook(['--provider', 'claude'], claudeInput, { AGENT_INBOX_HOME: home });
+  const r = await runHook(['--provider', 'claude'], claudeInput, { APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
   assert.equal(r.stdout.trim(), '');
 });
 
 test('입력이 JSON이 아니어도 exit 0, 결정 없음', async () => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
-  const r = await runHook(['--provider', 'codex'], 'garbage', { AGENT_INBOX_HOME: home });
+  const r = await runHook(['--provider', 'codex'], 'garbage', { APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
   assert.equal(r.stdout.trim(), '');
 });
@@ -65,7 +65,7 @@ test('정책 훅이 결정하면 데몬을 기다리지 않고 그 결정을 그
   );
   chmodSync(policy, 0o755);
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 5, policyHooks: { claude: [policy] } }));
-  const r = await runHook(['--provider', 'claude'], claudeInput, { AGENT_INBOX_HOME: home });
+  const r = await runHook(['--provider', 'claude'], claudeInput, { APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
   const out = JSON.parse(r.stdout);
   assert.equal(out.hookSpecificOutput.hookEventName, 'PermissionRequest');
@@ -79,7 +79,7 @@ test('정책 훅이 결정하면 데몬을 기다리지 않고 그 결정을 그
 test('정책이 통과시키면 데몬에 등록하고 사용자 결정을 받아 낸다 (표면이 보고 있는 상태)', async t => {
   const { home, api } = await bootDaemon(t);
   await api('/requests'); // 표면이 한 번 다녀간 것으로 기록된다
-  const running = runHook(['--provider', 'codex'], claudeInput, { AGENT_INBOX_HOME: home, TMUX_PANE: '%9' });
+  const running = runHook(['--provider', 'codex'], claudeInput, { APPROVE_HERE_HOME: home, TMUX_PANE: '%9' });
   let pending = [];
   for (let i = 0; i < 40 && pending.length === 0; i++) {
     await new Promise(r => setTimeout(r, 50));
@@ -97,7 +97,7 @@ test('정책이 통과시키면 데몬에 등록하고 사용자 결정을 받�
 
 test('waitSeconds를 넘기면 expire 처리하고 결정 없이 exit 0', async t => {
   const { home, api } = await bootDaemon(t, { waitSeconds: 0.3, requireSurface: false });
-  const r = await runHook(['--provider', 'claude'], claudeInput, { AGENT_INBOX_HOME: home });
+  const r = await runHook(['--provider', 'claude'], claudeInput, { APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
   assert.equal(r.stdout.trim(), '');
   const recent = await api('/requests?status=recent');
@@ -107,6 +107,6 @@ test('waitSeconds를 넘기면 expire 처리하고 결정 없이 exit 0', async 
 test('allowlist 규칙에 맞으면 사용자에게 묻지 않고 allow', async t => {
   const { home } = await bootDaemon(t);
   writeFileSync(join(home, 'allowlist.json'), JSON.stringify([{ tool: 'Bash', commandPrefix: 'npm test' }]));
-  const r = await runHook(['--provider', 'claude'], claudeInput, { AGENT_INBOX_HOME: home });
+  const r = await runHook(['--provider', 'claude'], claudeInput, { APPROVE_HERE_HOME: home });
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.decision.behavior, 'allow');
 });

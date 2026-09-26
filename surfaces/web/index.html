@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent Inbox</title>
+<title>Approve Here</title>
 <meta name="description" content="여러 Claude Code·Codex 세션의 승인 요청을 한 자리에서 처리하는 로컬 대기함">
 <style>
   :root {
@@ -48,7 +48,7 @@
 <body>
 <main>
   <header>
-    <h1>Agent Inbox <span id="demo" class="demo" hidden>체험용 가짜 세션</span></h1>
+    <h1>Approve Here <span id="demo" class="demo" hidden>체험용 가짜 세션</span></h1>
     <div id="state" class="state">연결 중…</div>
   </header>
   <section id="pending"></section>
@@ -89,7 +89,7 @@
   }
 
   // ---- 실제 데몬 ----
-  const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json' };
+  const headers = { 'x-approve-here-token': token, 'content-type': 'application/json' };
   async function api(path, init = {}) {
     const res = await fetch(path, { ...init, headers });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
