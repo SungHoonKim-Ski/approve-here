@@ -54,7 +54,7 @@ final class OnboardingPanel {
     }
     panel.orderFrontRegardless()
     self.panel = panel
-    Runtime.log("onboarding shown")
+    Runtime.log("onboarding shown frame=\(panel.frame)")
   }
 
   /// 연결 상태가 바뀌면 안내 카드도 다시 그린다.

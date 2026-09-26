@@ -8,6 +8,8 @@
 
 ## 시작하기
 
+> 화면과 함께 보는 단계별 안내: [docs/GUIDE.md](docs/GUIDE.md)
+
 1. [Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 **ApproveHere.dmg**를 내려받아 열고, 앱을 Applications로 끌어 넣습니다.
 2. 앱을 엽니다. Apple 서명이 없어 처음 한 번은 막힐 수 있습니다 — 시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"를 누르거나, 앱을 우클릭 → 열기.
 3. 메뉴바의 아이콘을 눌러 **Claude Code 연결**, **Codex 연결**을 켭니다. 쓰는 것만 켜도 됩니다.
