@@ -32,14 +32,39 @@ const commands = {
     const result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ behavior, message: message.join(' ') || undefined }) });
     console.log(`${result.status}: ${result.toolName} ${summary(result)}`);
   },
+  async tui() {
+    await import('../surfaces/tui/index.mjs');
+  },
+  async open() {
+    const home = inboxHome();
+    const info = readDaemonInfo(home);
+    const token = readToken(home);
+    if (!info || !token) throw new Error('데몬이 실행 중이 아닙니다. `agent-inbox start`로 시작하세요.');
+    const url = `http://127.0.0.1:${info.port}/#token=${token}`;
+    console.log(url);
+    const { spawn } = await import('node:child_process');
+    const opener = process.platform === 'darwin' ? 'open' : process.platform === 'win32' ? 'start' : 'xdg-open';
+    spawn(opener, [url], { stdio: 'ignore', detached: true }).on('error', () => {}).unref();
+  },
+  async app() {
+    const { existsSync } = await import('node:fs');
+    const { spawn } = await import('node:child_process');
+    const bundle = new URL('../surfaces/macos/dist/AgentInbox.app', import.meta.url).pathname;
+    if (process.platform !== 'darwin') throw new Error('메뉴바 앱은 macOS 전용입니다. `agent-inbox tui` 또는 `agent-inbox open`을 쓰세요.');
+    if (!existsSync(bundle)) throw new Error(`앱 번들이 없습니다. 먼저 빌드하세요: sh ${new URL('../surfaces/macos/build.sh', import.meta.url).pathname}`);
+    spawn('open', [bundle], { stdio: 'ignore', detached: true }).unref();
+    console.log('메뉴바에 ⏳ 아이콘이 뜹니다. 처음 실행이면 알림 권한을 물을 수 있습니다.');
+  },
   help() {
     console.log(`agent-inbox <command>
 
-  start [--port N]        대기함 데몬을 이 터미널에서 실행
-  status                  데몬 상태
-  pending                 대기 중인 요청 목록
-  decide <id> allow|deny  요청에 결정
-  install --claude --codex  훅을 CLI 설정에 등록
+  install --claude --codex  훅을 CLI 설정에 등록 (한 번)
+  start [--port N]          대기함 데몬을 이 터미널에서 실행
+  tui                       이 터미널(tmux pane)을 대기함으로
+  app                       macOS 메뉴바 앱 실행
+  open                      브라우저 대기함 열기
+  status · pending          데몬 상태 · 대기 목록
+  decide <id> allow|deny    터미널에서 결정
 
 데이터 폴더: ${inboxHome()} (AGENT_INBOX_HOME으로 변경)`);
   },

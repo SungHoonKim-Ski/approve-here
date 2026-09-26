@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Inbox</title>
+<meta name="description" content="여러 Claude Code·Codex 세션의 승인 요청을 한 자리에서 처리하는 로컬 대기함">
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --ink: #1c1f24; --muted: #6b7280; --line: #e5e7eb;
+    --allow: #0f7b43; --deny: #b42318; --accent: #2f5bea; --chip: #eef2ff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1115; --card: #171a21; --ink: #e8eaf0; --muted: #9aa3b2; --line: #262b36;
+      --allow: #3ddc84; --deny: #ff6b5e; --accent: #7aa2ff; --chip: #1f2a4a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1115; --card: #171a21; --ink: #e8eaf0; --muted: #9aa3b2; --line: #262b36;
+    --allow: #3ddc84; --deny: #ff6b5e; --accent: #7aa2ff; --chip: #1f2a4a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 -apple-system, "Pretendard", "Apple SD Gothic Neo", system-ui, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 24px 16px 64px; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  h1 { font-size: 20px; margin: 0; }
+  .state { color: var(--muted); font-size: 13px; }
+  .demo { background: var(--chip); color: var(--accent); border-radius: 999px; padding: 2px 10px; font-size: 12px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; margin-bottom: 10px; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--muted); font-size: 13px; margin-bottom: 6px; }
+  .meta b { color: var(--ink); }
+  code { font: 13px/1.5 ui-monospace, "SF Mono", Menlo, monospace; background: var(--bg); padding: 2px 6px; border-radius: 6px; word-break: break-all; }
+  .desc { color: var(--muted); font-size: 13px; margin: 6px 0 0; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  button { border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  button.allow { border-color: var(--allow); color: var(--allow); }
+  button.deny { border-color: var(--deny); color: var(--deny); }
+  button:disabled { opacity: .5; cursor: default; }
+  .empty { color: var(--muted); text-align: center; padding: 32px 0; }
+  h2 { font-size: 14px; color: var(--muted); margin: 24px 0 8px; font-weight: 600; }
+  .recent { display: grid; grid-template-columns: 96px 1fr; gap: 4px 12px; font-size: 13px; }
+  .recent .by { color: var(--muted); }
+  .recent .allowed { color: var(--allow); } .recent .denied { color: var(--deny); }
+  footer { margin-top: 32px; color: var(--muted); font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Agent Inbox <span id="demo" class="demo" hidden>체험용 가짜 세션</span></h1>
+    <div id="state" class="state">연결 중…</div>
+  </header>
+  <section id="pending"></section>
+  <h2>최근 처리</h2>
+  <section id="recent" class="recent"></section>
+  <footer>
+    터미널 창을 돌며 "허용할까요?"를 찾던 일을 한 자리로 모았습니다. 판단은 당신의 정책 훅이 먼저 하고, 남은 것만 여기로 옵니다.
+    데몬이 없으면 이 페이지는 가짜 세션으로 동작을 보여줍니다.
+  </footer>
+</main>
+<script>
+(() => {
+  const token = new URLSearchParams(location.hash.slice(1)).get('token');
+  const demoMode = !token;
+  const $ = id => document.getElementById(id);
+  let pending = [], recent = [];
+
+  const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const summary = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command : (r.toolInput?.file_path ? `${r.toolName} ${r.toolInput.file_path}` : r.toolName);
+  const prefix = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command.trim().split(/\s+/).slice(0, 2).join(' ') : null;
+  const age = iso => { const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 60 ? `${s}초` : `${Math.round(s / 60)}분`; };
+
+  function render() {
+    $('state').textContent = demoMode ? `${pending.length}건 대기 (체험)` : `${pending.length}건 대기`;
+    $('pending').innerHTML = pending.length ? pending.map(r => `
+      <article class="card" data-id="${esc(r.id)}">
+        <div class="meta"><b>[${esc(r.provider)}]</b><span>${esc(r.project ?? '?')}</span><span>${esc(r.toolName)}</span><span>${age(r.createdAt)} 전</span>${r.tmux?.pane ? `<span>tmux ${esc(r.tmux.pane)}</span>` : ''}</div>
+        <code>${esc(summary(r))}</code>
+        ${r.description ? `<p class="desc">↳ ${esc(r.description)}</p>` : ''}
+        <div class="actions">
+          <button class="allow" data-act="allow">허용</button>
+          ${prefix(r) ? `<button data-act="remember">허용 + <code>${esc(prefix(r))}</code> 앞으로 자동</button>` : ''}
+          <button class="deny" data-act="deny">거부</button>
+          ${r.tmux?.pane ? `<button data-act="jump">그 tmux 창으로</button>` : ''}
+        </div>
+      </article>`).join('') : '<p class="empty">대기 중인 승인 요청이 없습니다.</p>';
+    $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}</code>`).join('');
+  }
+
+  // ---- 실제 데몬 ----
+  const headers = { 'x-agent-inbox-token': token, 'content-type': 'application/json' };
+  async function api(path, init = {}) {
+    const res = await fetch(path, { ...init, headers });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.status);
+    return res.json();
+  }
+  async function refresh() {
+    try {
+      [pending, recent] = await Promise.all([api('/requests?status=pending'), api('/requests?status=recent')]);
+    } catch (e) { $('state').textContent = `데몬 연결 실패: ${e.message}`; return; }
+    render();
+  }
+  function subscribe() {
+    const es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
+    es.onmessage = refresh; es.addEventListener('registered', refresh); es.addEventListener('decided', refresh); es.addEventListener('expired', refresh);
+    es.onerror = () => { $('state').textContent = '데몬 연결 끊김 — 재시도 중'; };
+    refresh();
+  }
+
+  // ---- 체험(가짜 세션) ----
+  const fake = [
+    { provider: 'claude', project: 'shop-fe', toolName: 'Bash', toolInput: { command: 'npm run build' }, tmux: { pane: '%3' } },
+    { provider: 'codex', project: 'shop-be', toolName: 'Bash', toolInput: { command: "printf 'hello\\n' >> README.md", description: '현재 환경이 읽기 전용이므로 README.md에 쓰기 권한을 허용할까요?' }, tmux: { pane: '%7' } },
+    { provider: 'claude', project: 'infra', toolName: 'Bash', toolInput: { command: 'rm -rf build/ && terraform apply -auto-approve' }, tmux: { pane: '%9' } },
+    { provider: 'codex', project: 'shop-fe', toolName: 'Bash', toolInput: { command: 'git push origin feature/cart' } },
+  ];
+  let seq = 0;
+  function spawnFake() {
+    const base = fake[seq % fake.length]; seq += 1;
+    pending = [...pending, { ...base, id: `demo-${seq}`, createdAt: new Date().toISOString() }];
+    render();
+  }
+  function demoDecide(id, status, by) {
+    const r = pending.find(x => x.id === id); if (!r) return;
+    pending = pending.filter(x => x.id !== id);
+    recent = [{ ...r, status, decidedBy: by }, ...recent];
+    render();
+  }
+
+  document.addEventListener('click', async e => {
+    const btn = e.target.closest('button[data-act]'); if (!btn) return;
+    const id = btn.closest('article').dataset.id; const act = btn.dataset.act;
+    const r = pending.find(x => x.id === id);
+    btn.disabled = true;
+    if (demoMode) {
+      if (act === 'jump') { $('state').textContent = `체험에서는 tmux ${r.tmux?.pane}로 점프하는 대신 이 문장을 보여줍니다.`; btn.disabled = false; return; }
+      demoDecide(id, act === 'deny' ? 'denied' : 'allowed', 'user');
+      if (act === 'remember') { const p = prefix(r); fake.forEach(f => { if (f.toolInput.command?.startsWith(p)) f.auto = true; }); }
+      return;
+    }
+    try {
+      if (act === 'jump') await api(`/requests/${id}/jump`, { method: 'POST' });
+      else await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
+    } catch (err) { $('state').textContent = `실패: ${err.message}`; btn.disabled = false; }
+  });
+
+  if (demoMode) {
+    $('demo').hidden = false;
+    render(); spawnFake(); setTimeout(spawnFake, 1200);
+    setInterval(() => {
+      const next = fake[seq % fake.length];
+      if (next.auto) { seq += 1; recent = [{ ...next, id: `demo-${seq}`, createdAt: new Date().toISOString(), status: 'auto', decidedBy: 'allowlist' }, ...recent]; render(); }
+      else if (pending.length < 3) spawnFake();
+    }, 4000);
+  } else subscribe();
+})();
+</script>
+</body>
+</html>

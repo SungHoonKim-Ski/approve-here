@@ -15,6 +15,7 @@
     "core/",
     "hook/",
     "surfaces/tui/",
+    "surfaces/web/",
     "README.md"
   ],
   "scripts": {
