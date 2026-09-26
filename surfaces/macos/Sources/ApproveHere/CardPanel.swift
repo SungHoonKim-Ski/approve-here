@@ -137,7 +137,8 @@ final class CardPanelController {
   private func fit(_ hosting: NSView) -> NSSize {
     hosting.layoutSubtreeIfNeeded()
     let measured = hosting.fittingSize.height
-    let height = measured > 40 && measured < 1500 ? measured : 140
+    // 요약 줄은 40pt가 안 된다. 20pt 아래나 터무니없이 큰 값만 잘못 잰 것으로 본다.
+    let height = measured > 20 && measured < 1500 ? measured : 140
     return NSSize(width: width, height: height)
   }
 
