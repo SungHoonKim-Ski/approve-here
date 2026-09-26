@@ -39,8 +39,10 @@ final class CardPanelController {
   }
 
   private func makePanel(for request: PendingRequest) -> NSPanel {
-    let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 10),
-                        styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    let panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 10),
+                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+    // 뜰 때는 포커스를 빼앗지 않고, 입력칸을 클릭했을 때만 키 윈도우가 된다.
+    panel.becomesKeyOnlyIfNeeded = true
     // 전체화면 Space의 앱 위에도 떠야 한다. .floating은 전체화면 창 아래로 깔린다.
     panel.level = .statusBar
     panel.isOpaque = false
@@ -90,6 +92,12 @@ final class CardPanelController {
     }
     if !order.isEmpty { Runtime.log("card layout screen=\(frame) frames=\(order.compactMap { panels[$0]?.frame })") }
   }
+}
+
+/// 테두리 없는 창은 기본으로 키 윈도우가 못 되어 텍스트 입력을 받지 못한다. 카드 안 입력칸이 타이핑을 받으려면 이걸 열어야 한다.
+final class KeyablePanel: NSPanel {
+  override var canBecomeKey: Bool { true }
+  override var canBecomeMain: Bool { false }
 }
 
 struct RequestCardView: View {
