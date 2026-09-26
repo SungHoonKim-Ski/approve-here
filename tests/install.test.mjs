@@ -18,8 +18,14 @@ test('빈 홈에 Claude·Codex 훅을 등록하고, 두 번 실행해도 항목�
     assert.equal(groups[0].hooks[0].type, 'command');
     assert.equal(groups[0].hooks[0].timeout, 600);
   }
-  assert.match(JSON.parse(readFileSync(join(userHome, '.claude/settings.json'), 'utf8')).hooks.PermissionRequest[0].hooks[0].command, /--provider claude$/);
-  assert.match(JSON.parse(readFileSync(join(userHome, '.codex/hooks.json'), 'utf8')).hooks.PermissionRequest[0].hooks[0].command, /--provider codex$/);
+  const claude = JSON.parse(readFileSync(join(userHome, '.claude/settings.json'), 'utf8'));
+  assert.match(claude.hooks.PermissionRequest[0].hooks[0].command, /--provider claude$/);
+  assert.equal(claude.hooks.PreToolUse.length, 1, 'Claude에는 AskUserQuestion용 PreToolUse 훅도 하나');
+  assert.equal(claude.hooks.PreToolUse[0].matcher, 'AskUserQuestion');
+  assert.equal(claude.hooks.PreToolUse[0].hooks[0].command, claude.hooks.PermissionRequest[0].hooks[0].command, '같은 명령이 두 이벤트를 받는다');
+  const codex = JSON.parse(readFileSync(join(userHome, '.codex/hooks.json'), 'utf8'));
+  assert.match(codex.hooks.PermissionRequest[0].hooks[0].command, /--provider codex$/);
+  assert.equal(codex.hooks.PreToolUse, undefined, 'Codex에는 AskUserQuestion이 없다');
   assert.ok(logs.some(m => m.includes('Hooks need review')), 'Codex 신뢰 안내를 출력한다');
 });
 
@@ -44,7 +50,8 @@ test('기존 훅·다른 설정은 보존하고 우리 항목만 추가·교체�
   assert.equal(result.changed, true);
   const settings = JSON.parse(readFileSync(path, 'utf8'));
   assert.deepEqual(settings.permissions, { allow: ['Bash(node *)'] });
-  assert.equal(settings.hooks.PreToolUse.length, 1);
+  assert.equal(settings.hooks.PreToolUse.length, 2, '기존 Bash guard + 우리 AskUserQuestion');
+  assert.equal(settings.hooks.PreToolUse[0].hooks[0].command, 'node guard.mjs');
   const groups = settings.hooks.PermissionRequest;
   assert.equal(groups.length, 2, '기존 permission-handler 그룹 + 우리 그룹');
   assert.equal(groups[0].hooks[0].command, 'node permission-handler.mjs');
@@ -53,12 +60,13 @@ test('기존 훅·다른 설정은 보존하고 우리 항목만 추가·교체�
 
 test('uninstall은 우리 항목만 걷어낸다', () => {
   const userHome = mkdtempSync(join(tmpdir(), 'inbox-user-'));
-  const path = join(userHome, '.codex/hooks.json');
-  installInto(path, 'codex', '/opt/inbox/hook/permission-hook.mjs');
+  const path = join(userHome, '.claude/settings.json');
+  installInto(path, 'claude', '/opt/inbox/hook/permission-hook.mjs');
   const removed = uninstallFrom(path);
   assert.equal(removed.changed, true);
   const settings = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(settings.hooks.PermissionRequest, undefined);
+  assert.equal(settings.hooks.PreToolUse, undefined);
 });
 
 test('provider를 지정하지 않으면 거절한다', () => {

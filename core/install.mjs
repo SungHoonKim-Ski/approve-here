@@ -10,8 +10,18 @@ export function hookCommand(provider, hookPath = HOOK_PATH) {
 }
 
 /**
- * Claude Code(~/.claude/settings.json)와 Codex(~/.codex/hooks.json)에 PermissionRequest 훅을 등록한다.
- * 두 CLI의 hooks 설정 모양이 같아 한 함수로 처리한다. 이미 있는 다른 훅은 그대로 두고, 우리 항목은 하나만 유지한다.
+ * provider별로 우리 훅이 서는 이벤트. 훅 하나가 stdin의 hook_event_name으로 둘을 가른다.
+ * Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
+ */
+export function hookEvents(provider) {
+  return provider === 'claude'
+    ? [{ event: 'PermissionRequest' }, { event: 'PreToolUse', matcher: 'AskUserQuestion' }]
+    : [{ event: 'PermissionRequest' }];
+}
+
+/**
+ * Claude Code(~/.claude/settings.json)와 Codex(~/.codex/hooks.json)에 훅을 등록한다.
+ * 두 CLI의 hooks 설정 모양이 같아 한 함수로 처리한다. 이미 있는 다른 훅은 그대로 두고, 우리 항목은 이벤트마다 하나만 유지한다.
  */
 export function install({ claude = false, codex = false, home, userHome = homedir(), hookPath = HOOK_PATH, log = console.log } = {}) {
   if (!claude && !codex) throw new Error('--claude, --codex 중 하나 이상을 지정하세요.');
@@ -29,18 +39,20 @@ export function install({ claude = false, codex = false, home, userHome = homedi
 
 export function installInto(path, provider, hookPath = HOOK_PATH) {
   const current = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
-  const hooks = current.hooks && typeof current.hooks === 'object' ? current.hooks : {};
-  const groups = Array.isArray(hooks.PermissionRequest) ? hooks.PermissionRequest : [];
-  const ours = { hooks: [{ type: 'command', command: hookCommand(provider, hookPath), timeout: 600 }] };
-  const kept = groups
-    .map(group => ({ ...group, hooks: (group.hooks || []).filter(h => !String(h.command || '').includes(MARKER)) }))
-    .filter(group => group.hooks.length > 0);
-  const already = groups.some(group => (group.hooks || []).some(h => h.command === ours.hooks[0].command));
-  const next = { ...current, hooks: { ...hooks, PermissionRequest: [...kept, ours] } };
-  const changed = !already || kept.length !== groups.length;
+  const hooks = current.hooks && typeof current.hooks === 'object' ? { ...current.hooks } : {};
+  const command = hookCommand(provider, hookPath);
+  let changed = false;
+  for (const { event, matcher } of hookEvents(provider)) {
+    const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
+    const ours = { ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command, timeout: 600 }] };
+    const kept = withoutOurs(groups);
+    const already = groups.some(group => (group.hooks || []).some(h => h.command === command) && (group.matcher ?? null) === (matcher ?? null));
+    hooks[event] = [...kept, ours];
+    if (!already || kept.length !== groups.length) changed = true;
+  }
   if (changed) {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify(next, null, 2) + '\n');
+    writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
   }
   return { path, provider, changed };
 }
@@ -48,14 +60,23 @@ export function installInto(path, provider, hookPath = HOOK_PATH) {
 export function uninstallFrom(path) {
   if (!existsSync(path)) return { path, changed: false };
   const current = JSON.parse(readFileSync(path, 'utf8'));
-  const groups = current.hooks?.PermissionRequest;
-  if (!Array.isArray(groups)) return { path, changed: false };
-  const kept = groups
+  if (!current.hooks || typeof current.hooks !== 'object') return { path, changed: false };
+  const hooks = { ...current.hooks };
+  let changed = false;
+  for (const event of ['PermissionRequest', 'PreToolUse']) {
+    const groups = hooks[event];
+    if (!Array.isArray(groups)) continue;
+    const kept = withoutOurs(groups);
+    if (kept.length !== groups.length) changed = true;
+    if (kept.length) hooks[event] = kept;
+    else delete hooks[event];
+  }
+  if (changed) writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
+  return { path, changed };
+}
+
+function withoutOurs(groups) {
+  return groups
     .map(group => ({ ...group, hooks: (group.hooks || []).filter(h => !String(h.command || '').includes(MARKER)) }))
     .filter(group => group.hooks.length > 0);
-  const hooks = { ...current.hooks };
-  if (kept.length) hooks.PermissionRequest = kept;
-  else delete hooks.PermissionRequest;
-  writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
-  return { path, changed: kept.length !== groups.length };
 }

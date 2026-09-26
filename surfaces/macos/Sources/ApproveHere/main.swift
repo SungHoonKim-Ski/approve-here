@@ -2,11 +2,12 @@ import AppKit
 import ServiceManagement
 import UserNotifications
 
-/// 메뉴바 앱이 제품의 전부다. 훅 등록(연결 켜기/끄기), 데몬 기동, 대기 카드, 알림 버튼을 여기서 처리한다.
+/// 메뉴바 앱이 제품의 전부다. 훅 등록(연결 켜기/끄기), 데몬 기동, 화면 오른쪽 위 카드 패널, 메뉴의 대기 목록을 처리한다.
 /// 판단 로직은 없다 — 훅·데몬(번들된 Node 코어)의 계약을 소비할 뿐이다.
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
   private let client = InboxClient()
   private var item: NSStatusItem!
+  private var cards: CardPanelController!
   private var node: String?
   private var pending: [PendingRequest] = []
   private var known: Set<String> = []
@@ -14,13 +15,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var notice: String?
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
+  private var notificationsGranted = false
   private let work = DispatchQueue(label: "approve-here.runtime")
-  private let notificationsEnabled = Bundle.main.bundleIdentifier != nil
 
   func applicationDidFinishLaunching(_ notification: Notification) {
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     item.menu = NSMenu()
-    if notificationsEnabled { setupNotifications() }
+    cards = CardPanelController(actions: .init(
+      allow: { [weak self] r in self?.decide(r.id, "allow", nil) },
+      allowRemember: { [weak self] r in self?.decide(r.id, "allow", r.commandPrefix) },
+      deny: { [weak self] r in self?.decide(r.id, "deny", nil) },
+      jump: { [weak self] r in Task { try? await self?.client.jump(r.id) } },
+      answer: { [weak self] r, answers in self?.answer(r.id, answers) },
+      passthrough: { [weak self] r in self?.passthrough(r.id) }
+    ))
+    if Bundle.main.bundleIdentifier != nil { setupNotifications() }
     Runtime.log("launch bundle=\(Bundle.main.bundlePath) core=\(Runtime.coreBundled)")
     render()
     bootstrap()
@@ -40,10 +49,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       Runtime.log("node=\(found ?? "없음") \(found.map(Runtime.nodeVersion) ?? "")")
       DispatchQueue.main.async { self.node = found; self.render() }
       guard let found else { return }
-      // 앱을 옮겼거나 node가 바뀌었으면 등록된 훅 명령을 조용히 맞춘다.
+      // 앱을 옮겼거나 node가 바뀌었거나 이벤트가 늘었으면 등록된 훅을 조용히 맞춘다.
       for provider in Provider.allCases where HookConnections.isStale(provider, node: found) {
         try? HookConnections.connect(provider, node: found)
-        DispatchQueue.main.async { self.notice = "\(provider.title) 훅 경로를 갱신했습니다" + (provider == .codex ? " — Codex가 다음 실행에서 훅 신뢰를 다시 물어요" : "") }
+        DispatchQueue.main.async {
+          self.notice = "\(provider.title) 훅을 갱신했습니다" + (provider == .codex ? " — Codex가 다음 실행에서 훅 신뢰를 다시 물어요" : "")
+        }
       }
       Runtime.ensureDaemon(node: found)
       DispatchQueue.main.async { self.poll() }
@@ -58,10 +69,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let fresh = next.filter { !known.contains($0.id) }
         known.formUnion(next.map(\.id))
         pending = next
+        cards.sync(next)
         for request in fresh { notify(request) }
       } catch {
         daemonUp = false
         pending = []
+        cards.sync([])
         ensureDaemonIfNeeded()
       }
       render()
@@ -95,33 +108,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         entry.representedObject = provider.rawValue
         menu.addItem(entry)
       }
-      if connected.contains(.codex) {
-        menu.addItem(disabled("   Codex는 다음 실행 때 훅 신뢰를 한 번 물어요"))
-      }
+      if connected.contains(.codex) { menu.addItem(disabled("   Codex는 다음 실행 때 훅 신뢰를 한 번 물어요")) }
     }
     menu.addItem(.separator())
 
     if !daemonUp {
       menu.addItem(disabled(node == nil ? "대기함 꺼짐" : "대기함 준비 중…"))
     } else if pending.isEmpty {
-      menu.addItem(disabled(connected.isEmpty ? "위에서 연결을 켜면 승인 요청이 여기로 옵니다" : "대기 중인 승인 요청 없음"))
+      menu.addItem(disabled(connected.isEmpty ? "위에서 연결을 켜면 승인 요청이 여기로 옵니다" : "대기 중인 요청 없음"))
     }
-    for request in pending {
-      let entry = NSMenuItem(title: "[\(request.provider)] \(request.project ?? "?") · \(request.summary.prefix(60))", action: nil, keyEquivalent: "")
-      let sub = NSMenu()
-      if let description = request.description {
-        sub.addItem(disabled(String(description.prefix(90))))
-        sub.addItem(.separator())
-      }
-      sub.addItem(requestAction("허용", #selector(allow(_:)), request))
-      if let prefix = request.commandPrefix {
-        sub.addItem(requestAction("허용 + \"\(prefix)\" 앞으로 자동", #selector(allowRemember(_:)), request))
-      }
-      sub.addItem(requestAction("거부", #selector(deny(_:)), request))
-      if request.tmux?.pane != nil { sub.addItem(requestAction("그 tmux 창으로", #selector(jump(_:)), request)) }
-      entry.submenu = sub
-      menu.addItem(entry)
-    }
+    for request in pending { menu.addItem(requestMenu(request)) }
     menu.addItem(.separator())
 
     if let notice { menu.addItem(disabled(notice)) }
@@ -131,6 +127,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(action("기록 폴더 열기", #selector(openHome)))
     menu.addItem(withTitle: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     item.menu = menu
+  }
+
+  private func requestMenu(_ request: PendingRequest) -> NSMenuItem {
+    let label = request.isQuestion ? "질문" : request.toolName
+    let entry = NSMenuItem(title: "[\(request.provider)] \(request.project ?? "?") · \(label) · \(request.summary.prefix(50))", action: nil, keyEquivalent: "")
+    let sub = NSMenu()
+    if request.isQuestion {
+      for q in request.questions ?? [] {
+        sub.addItem(disabled(String(q.question.prefix(90))))
+        if (request.questions?.count ?? 0) == 1, !(q.multiSelect ?? false) {
+          for option in q.options ?? [] {
+            let pick = action("   \(option.label)", #selector(answerOption(_:)))
+            pick.representedObject = [request.id, q.question, option.label]
+            if let d = option.description { pick.toolTip = d }
+            sub.addItem(pick)
+          }
+        } else {
+          sub.addItem(disabled("   → 화면 오른쪽 위 카드에서 고르세요"))
+        }
+      }
+      sub.addItem(.separator())
+      sub.addItem(requestAction("터미널에서 답하기", #selector(passthroughItem(_:)), request))
+    } else {
+      if let description = request.description {
+        sub.addItem(disabled(String(description.prefix(90))))
+        sub.addItem(.separator())
+      }
+      sub.addItem(requestAction("허용", #selector(allow(_:)), request))
+      if let prefix = request.commandPrefix { sub.addItem(requestAction("허용 + \"\(prefix)\" 앞으로 자동", #selector(allowRemember(_:)), request)) }
+      sub.addItem(requestAction("거부", #selector(deny(_:)), request))
+    }
+    if request.tmux?.pane != nil { sub.addItem(requestAction("그 tmux 창으로", #selector(jump(_:)), request)) }
+    entry.submenu = sub
+    return entry
   }
 
   private func disabled(_ title: String) -> NSMenuItem {
@@ -161,7 +191,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         notice = "\(provider.title) 연결을 끊었습니다"
       } else {
         try HookConnections.connect(provider, node: node)
-        notice = provider == .codex ? "Codex 연결됨 — 다음 codex 실행에서 'Hooks need review'가 뜨면 신뢰해 주세요" : "Claude Code 연결됨 — 승인이 필요한 순간부터 여기로 옵니다"
+        notice = provider == .codex ? "Codex 연결됨 — 다음 codex 실행에서 'Hooks need review'가 뜨면 신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
         ensureDaemonIfNeeded()
       }
     } catch {
@@ -196,6 +226,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     guard let id = sender.representedObject as? String else { return }
     Task { try? await client.jump(id) }
   }
+  @objc private func answerOption(_ sender: NSMenuItem) {
+    guard let parts = sender.representedObject as? [String], parts.count == 3 else { return }
+    answer(parts[0], [parts[1]: parts[2]])
+  }
+  @objc private func passthroughItem(_ sender: NSMenuItem) { passthrough(sender.representedObject as? String) }
 
   private func decide(_ id: String?, _ behavior: String, _ remember: String?) {
     guard let id else { return }
@@ -205,40 +240,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
   }
 
-  // MARK: 알림 (번들일 때만)
+  private func answer(_ id: String, _ answers: [String: String]) {
+    Task { @MainActor in
+      try? await client.answer(id, answers: answers)
+      poll()
+    }
+  }
+
+  private func passthrough(_ id: String?) {
+    guard let id else { return }
+    Task { @MainActor in
+      try? await client.passthrough(id)
+      poll()
+    }
+  }
+
+  // MARK: 시스템 알림 — 허용된 경우에만 덤으로. 카드 패널이 주 경로다.
 
   private func setupNotifications() {
     let center = UNUserNotificationCenter.current()
     center.delegate = self
     let allow = UNNotificationAction(identifier: "allow", title: "허용", options: [])
     let deny = UNNotificationAction(identifier: "deny", title: "거부", options: [.destructive])
-    let jump = UNNotificationAction(identifier: "jump", title: "창으로", options: [.foreground])
-    center.setNotificationCategories([UNNotificationCategory(identifier: "request", actions: [allow, deny, jump], intentIdentifiers: [])])
-    center.requestAuthorization(options: [.alert, .sound]) { granted, error in
+    center.setNotificationCategories([UNNotificationCategory(identifier: "request", actions: [allow, deny], intentIdentifiers: [])])
+    center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, error in
+      self?.notificationsGranted = granted
       Runtime.log("notification authorization granted=\(granted) \(error.map { "\($0)" } ?? "")")
     }
   }
 
   private func notify(_ request: PendingRequest) {
-    guard notificationsEnabled else { return }
+    guard notificationsGranted else { return }
     let content = UNMutableNotificationContent()
-    content.title = "[\(request.provider)] \(request.project ?? "승인 요청")"
+    content.title = "[\(request.provider)] \(request.project ?? "요청")"
     content.body = request.description ?? request.summary
-    content.categoryIdentifier = "request"
+    content.categoryIdentifier = request.isQuestion ? "" : "request"
     content.userInfo = ["id": request.id]
     content.sound = .default
-    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: request.id, content: content, trigger: nil)) { error in
-      Runtime.log("notify \(request.id) \(error.map { "error \($0)" } ?? "ok")")
-    }
+    UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: request.id, content: content, trigger: nil))
   }
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
     guard let id = response.notification.request.content.userInfo["id"] as? String else { return }
-    Runtime.log("notification action \(response.actionIdentifier) \(id)")
     switch response.actionIdentifier {
     case "allow": try? await client.decide(id, behavior: "allow")
     case "deny": try? await client.decide(id, behavior: "deny")
-    case "jump": try? await client.jump(id)
     default: break
     }
     await MainActor.run { poll() }

@@ -1,7 +1,7 @@
 import Foundation
 
-/// Claude Code·Codex 설정 파일에 PermissionRequest 훅을 넣고 빼는 일. CLI의 install.mjs와 같은 규칙이다:
-/// 다른 설정과 다른 훅은 건드리지 않고, 우리 항목(permission-hook.mjs)은 하나만 유지한다.
+/// Claude Code·Codex 설정 파일에 훅을 넣고 빼는 일. CLI의 install.mjs와 같은 규칙이다:
+/// 다른 설정과 다른 훅은 건드리지 않고, 우리 항목(permission-hook.mjs)은 이벤트마다 하나만 유지한다.
 enum Provider: String, CaseIterable {
   case claude, codex
 
@@ -13,6 +13,13 @@ enum Provider: String, CaseIterable {
       ? home.appendingPathComponent(".claude/settings.json")
       : home.appendingPathComponent(".codex/hooks.json")
   }
+
+  /// 훅이 서는 이벤트. Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
+  var events: [(event: String, matcher: String?)] {
+    self == .claude
+      ? [("PermissionRequest", nil), ("PreToolUse", "AskUserQuestion")]
+      : [("PermissionRequest", nil)]
+  }
 }
 
 struct HookConnections {
@@ -23,9 +30,9 @@ struct HookConnections {
     "\"\(node)\" \"\(Runtime.hookScript.path)\" --provider \(provider.rawValue)"
   }
 
-  static func registeredCommand(_ provider: Provider) -> String? {
+  static func registeredCommand(_ provider: Provider, event: String = "PermissionRequest") -> String? {
     guard let root = read(provider.settingsURL) else { return nil }
-    for group in permissionRequestGroups(root) {
+    for group in groups(root, event) {
       for hook in group["hooks"] as? [[String: Any]] ?? [] {
         if let command = hook["command"] as? String, command.contains(marker) { return command }
       }
@@ -35,18 +42,21 @@ struct HookConnections {
 
   static func isConnected(_ provider: Provider) -> Bool { registeredCommand(provider) != nil }
 
-  /// 등록된 명령이 지금의 앱 위치·node와 다르면(앱을 옮겼거나 node를 갈았으면) 다시 쓴다.
+  /// 등록된 명령이 지금의 앱 위치·node와 다르거나(앱을 옮겼거나 node를 갈았으면), 이벤트 하나가 빠져 있으면 다시 쓴다.
   static func isStale(_ provider: Provider, node: String) -> Bool {
-    guard let registered = registeredCommand(provider) else { return false }
-    return registered != command(for: provider, node: node)
+    guard isConnected(provider) else { return false }
+    let expected = command(for: provider, node: node)
+    return provider.events.contains { registeredCommand(provider, event: $0.event) != expected }
   }
 
   static func connect(_ provider: Provider, node: String) throws {
     var root = read(provider.settingsURL) ?? [:]
     var hooks = root["hooks"] as? [String: Any] ?? [:]
-    let kept = withoutOurs(permissionRequestGroups(root))
-    let ours: [String: Any] = ["hooks": [["type": "command", "command": command(for: provider, node: node), "timeout": 600]]]
-    hooks["PermissionRequest"] = kept + [ours]
+    for (event, matcher) in provider.events {
+      var ours: [String: Any] = ["hooks": [["type": "command", "command": command(for: provider, node: node), "timeout": 600]]]
+      if let matcher { ours["matcher"] = matcher }
+      hooks[event] = withoutOurs(groups(root, event)) + [ours]
+    }
     root["hooks"] = hooks
     try write(root, to: provider.settingsURL)
     Runtime.log("connect \(provider.rawValue) → \(provider.settingsURL.path)")
@@ -55,8 +65,10 @@ struct HookConnections {
   static func disconnect(_ provider: Provider) throws {
     guard var root = read(provider.settingsURL) else { return }
     var hooks = root["hooks"] as? [String: Any] ?? [:]
-    let kept = withoutOurs(permissionRequestGroups(root))
-    if kept.isEmpty { hooks.removeValue(forKey: "PermissionRequest") } else { hooks["PermissionRequest"] = kept }
+    for (event, _) in provider.events {
+      let kept = withoutOurs(groups(root, event))
+      if kept.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = kept }
+    }
     root["hooks"] = hooks
     try write(root, to: provider.settingsURL)
     Runtime.log("disconnect \(provider.rawValue)")
@@ -64,8 +76,8 @@ struct HookConnections {
 
   // MARK: - 내부
 
-  private static func permissionRequestGroups(_ root: [String: Any]) -> [[String: Any]] {
-    ((root["hooks"] as? [String: Any])?["PermissionRequest"] as? [[String: Any]]) ?? []
+  private static func groups(_ root: [String: Any], _ event: String) -> [[String: Any]] {
+    ((root["hooks"] as? [String: Any])?[event] as? [[String: Any]]) ?? []
   }
 
   private static func withoutOurs(_ groups: [[String: Any]]) -> [[String: Any]] {

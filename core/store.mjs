@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ensureHome } from './config.mjs';
 
 export const PENDING = 'pending';
-const FINAL = new Set(['allowed', 'denied', 'expired', 'auto', 'skipped']);
+const FINAL = new Set(['allowed', 'denied', 'answered', 'passed', 'expired', 'auto', 'skipped']);
 const PRESET = new Set(['auto', 'skipped']);
 const RECENT_LIMIT = 100;
 
@@ -22,6 +22,9 @@ export class Store {
     const status = PRESET.has(input.status) ? input.status : PENDING;
     const record = Object.freeze({
       id: randomUUID(),
+      // permission: 도구 실행 허용/거부 · question: AskUserQuestion의 답
+      kind: input.kind === 'question' ? 'question' : 'permission',
+      questions: input.kind === 'question' ? input.questions ?? [] : null,
       provider: input.provider,
       sessionId: input.sessionId ?? null,
       turnId: input.turnId ?? null,
@@ -64,13 +67,8 @@ export class Store {
   decide(id, decision, decidedBy = 'user') {
     const current = this.requests.get(id);
     if (!current || current.status !== PENDING) return null;
-    const next = Object.freeze({
-      ...current,
-      status: decision.behavior === 'allow' ? 'allowed' : 'denied',
-      decision,
-      decidedBy,
-      updatedAt: new Date().toISOString(),
-    });
+    const status = decision.answers ? 'answered' : decision.passthrough ? 'passed' : decision.behavior === 'allow' ? 'allowed' : 'denied';
+    const next = Object.freeze({ ...current, status, decision, decidedBy, updatedAt: new Date().toISOString() });
     this.settle(next, 'decided');
     return next;
   }

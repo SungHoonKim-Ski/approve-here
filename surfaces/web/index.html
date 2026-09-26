@@ -65,6 +65,7 @@
   const demoMode = !token;
   const $ = id => document.getElementById(id);
   let pending = [], recent = [];
+  const drafts = {};
 
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const summary = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command
@@ -76,7 +77,18 @@
 
   function render() {
     $('state').textContent = demoMode ? `${pending.length}건 대기 (체험)` : `${pending.length}건 대기`;
-    $('pending').innerHTML = pending.length ? pending.map(r => `
+    const questionCard = r => `
+      <article class="card" data-id="${esc(r.id)}">
+        <div class="meta"><b>[${esc(r.provider)}]</b><span>${esc(r.project ?? '?')}</span><span>질문</span><span>${age(r.createdAt)} 전</span>${r.tmux?.pane ? `<span>tmux ${esc(r.tmux.pane)}</span>` : ''}</div>
+        ${(r.questions || []).map((q, qi) => `
+          <p class="desc" style="color:var(--ink);margin-top:8px">${esc(q.question)}</p>
+          <div class="actions">${(q.options || []).map(o => `<button data-act="option" data-q="${qi}" data-label="${esc(o.label)}" title="${esc(o.description ?? '')}">${esc(o.label)}</button>`).join('')}</div>`).join('')}
+        <div class="actions">
+          <button data-act="passthrough">터미널에서 답하기</button>
+          ${r.tmux?.pane ? `<button data-act="jump">그 tmux 창으로</button>` : ''}
+        </div>
+      </article>`;
+    const permissionCard = r => `
       <article class="card" data-id="${esc(r.id)}">
         <div class="meta"><b>[${esc(r.provider)}]</b><span>${esc(r.project ?? '?')}</span><span>${esc(r.toolName)}</span><span>${age(r.createdAt)} 전</span>${r.tmux?.pane ? `<span>tmux ${esc(r.tmux.pane)}</span>` : ''}</div>
         <code>${esc(summary(r))}</code>
@@ -87,7 +99,8 @@
           <button class="deny" data-act="deny">거부</button>
           ${r.tmux?.pane ? `<button data-act="jump">그 tmux 창으로</button>` : ''}
         </div>
-      </article>`).join('') : '<p class="empty">대기 중인 승인 요청이 없습니다.</p>';
+      </article>`;
+    $('pending').innerHTML = pending.length ? pending.map(r => r.kind === 'question' ? questionCard(r) : permissionCard(r)).join('') : '<p class="empty">대기 중인 요청이 없습니다.</p>';
     $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}</code>`).join('');
   }
 
@@ -144,6 +157,16 @@
     }
     try {
       if (act === 'jump') await api(`/requests/${id}/jump`, { method: 'POST' });
+      else if (act === 'passthrough') await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
+      else if (act === 'option') {
+        // 질문 하나면 바로 보내고, 여럿이면 다 고른 뒤 보낸다.
+        const draft = (drafts[id] = drafts[id] || {});
+        draft[r.questions[Number(btn.dataset.q)].question] = btn.dataset.label;
+        btn.classList.add('allow');
+        if (Object.keys(draft).length < r.questions.length) { btn.disabled = false; return; }
+        await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ answers: draft }) });
+        delete drafts[id];
+      }
       else await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
     } catch (err) { $('state').textContent = `실패: ${err.message}`; btn.disabled = false; }
   });

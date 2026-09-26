@@ -102,6 +102,12 @@ export async function startDaemon({
 
   function decide(record, input) {
     if (record.status !== PENDING) throw new HttpError(409, `이미 ${record.status} 상태인 요청입니다.`);
+    if (record.kind === 'question') {
+      if (input.behavior) throw new HttpError(400, '질문 카드에는 answers 또는 passthrough를 보내세요.');
+      const decision = input.passthrough ? { passthrough: true } : { answers: input.answers };
+      return store.decide(record.id, decision, 'user');
+    }
+    if (input.answers || input.passthrough) throw new HttpError(400, '권한 카드에는 behavior(allow|deny)를 보내세요.');
     const decision = input.message ? { behavior: input.behavior, message: input.message } : { behavior: input.behavior };
     const decided = store.decide(record.id, decision, 'user');
     if (input.behavior === 'allow' && input.remember?.commandPrefix) {
@@ -167,11 +173,20 @@ function validateRequest(input) {
     throw new HttpError(400, 'auto 기록에는 decision.behavior가 필요합니다.');
   if (input.status !== undefined && !['pending', 'auto', 'skipped'].includes(input.status))
     throw new HttpError(400, 'status는 pending·auto·skipped 중 하나여야 합니다.');
+  if (input.kind === 'question' && !Array.isArray(input.questions)) throw new HttpError(400, '질문 카드에는 questions 배열이 필요합니다.');
   return input;
 }
 
 function validateDecision(input) {
-  if (!input || !['allow', 'deny'].includes(input.behavior)) throw new HttpError(400, 'behavior는 allow 또는 deny여야 합니다.');
+  if (!input || typeof input !== 'object') throw new HttpError(400, '결정 본문이 객체가 아닙니다.');
+  if (input.passthrough !== undefined && input.passthrough !== true) throw new HttpError(400, 'passthrough는 true만 허용합니다.');
+  if (input.answers !== undefined) {
+    const entries = Object.entries(input.answers ?? {});
+    if (!entries.length || entries.some(([, v]) => typeof v !== 'string')) throw new HttpError(400, 'answers는 {질문: 답(문자열)} 객체여야 합니다.');
+    return input;
+  }
+  if (input.passthrough) return input;
+  if (!['allow', 'deny'].includes(input.behavior)) throw new HttpError(400, 'behavior는 allow 또는 deny여야 합니다.');
   if (input.message !== undefined && typeof input.message !== 'string') throw new HttpError(400, 'message는 문자열이어야 합니다.');
   if (input.remember !== undefined && typeof input.remember?.commandPrefix !== 'string')
     throw new HttpError(400, 'remember.commandPrefix는 문자열이어야 합니다.');

@@ -1,10 +1,14 @@
 #!/usr/bin/env node
 /**
- * PermissionRequest 훅 — Claude Code와 Codex가 같은 계약을 쓴다.
+ * Claude Code·Codex 훅. 두 이벤트를 받는다.
  *
- * 순서: 사용자 정책(allowlist → config.policyHooks[provider]) → 결정이 없으면 대기함에 올리고 사용자 결정을 기다린다.
- * 어떤 실패에서도 결정 없이 exit 0으로 끝낸다 — 그러면 CLI가 원래 승인 프롬프트를 띄운다(두 CLI 공통 계약).
- * 판단은 여기서 하지 않는다. 판단은 사용자 정책이 하고, 이 훅은 그 자리와 대기함을 잇는다.
+ *  - PermissionRequest: 도구 실행 허용/거부. 사용자 정책(allowlist → config.policyHooks[provider])을 먼저 실행하고,
+ *    결정이 없을 때만 대기함에 올려 사용자 결정을 기다린다.
+ *  - PreToolUse(AskUserQuestion, Claude만): 질문을 대기함에 올리고, 사용자가 옵션을 고르면 tool_input.answers를 채워
+ *    allow로 돌려준다. Claude는 다이얼로그 없이 그 답을 받는다(2.1.283 실측; 문서에는 없는 경로).
+ *
+ * 어떤 실패에서도 결정 없이 exit 0으로 끝낸다 — 그러면 CLI가 원래 프롬프트/다이얼로그를 띄운다.
+ * 판단은 여기서 하지 않는다. 판단은 사용자 정책과 사용자가 하고, 이 훅은 그 자리와 대기함을 잇는다.
  */
 import { inboxHome, loadConfig, readToken, readAllowlist } from '../core/config.mjs';
 import { allowlistDecision, runPolicyHooks } from '../core/policy.mjs';
@@ -21,13 +25,18 @@ async function main() {
   const home = inboxHome();
   const config = loadConfig(home);
   const provider = argument('--provider') || detectProvider(input);
-  const request = toRequest(input, provider);
+  const question = input.hook_event_name === 'PreToolUse' && input.tool_name === 'AskUserQuestion';
+  if (input.hook_event_name === 'PreToolUse' && !question) return; // 다른 PreToolUse는 우리 일이 아니다
 
-  const policy = await decideByPolicy(request, raw, config, home);
-  if (policy) {
-    emit(policy.decision);
-    await record(home, config, { ...request, status: 'auto', decision: policy.decision, decidedBy: policy.decidedBy });
-    return;
+  const request = question ? toQuestionRequest(input, provider) : toRequest(input, provider);
+
+  if (!question) {
+    const policy = await decideByPolicy(request, raw, config, home);
+    if (policy) {
+      emitPermission(policy.decision);
+      await record(home, config, { ...request, status: 'auto', decision: policy.decision, decidedBy: policy.decidedBy });
+      return;
+    }
   }
 
   const client = apiClient(home, config);
@@ -48,10 +57,13 @@ async function main() {
     const remaining = Math.max(0.05, (deadline - Date.now()) / 1000);
     const state = await client.get(`/requests/${created.id}/wait?timeout=${Math.min(POLL_SECONDS, remaining)}`);
     if (!state) return;
-    if (state.status !== 'pending') {
-      if (state.decision) emit(state.decision);
-      return;
+    if (state.status === 'pending') continue;
+    if (question) {
+      if (state.status === 'answered' && state.decision?.answers) emitAnswers(input.tool_input, state.decision.answers);
+      return; // passed·expired: 출력 없음 → 원래 다이얼로그
     }
+    if (state.decision?.behavior) emitPermission(state.decision);
+    return;
   }
   await client.post(`/requests/${created.id}/expire`, {});
 }
@@ -66,7 +78,7 @@ async function decideByPolicy(request, raw, config, home) {
   return result ? { decision: result.decision, decidedBy: `policy:${result.policy}` } : null;
 }
 
-function toRequest(input, provider) {
+function common(input, provider) {
   return {
     provider,
     sessionId: input.session_id ?? null,
@@ -74,7 +86,6 @@ function toRequest(input, provider) {
     toolUseId: input.tool_use_id ?? null,
     toolName: input.tool_name,
     toolInput: input.tool_input ?? {},
-    description: input.tool_input?.description ?? null,
     cwd: input.cwd ?? process.cwd(),
     permissionMode: input.permission_mode ?? null,
     model: input.model ?? null,
@@ -82,13 +93,31 @@ function toRequest(input, provider) {
   };
 }
 
+function toRequest(input, provider) {
+  return { ...common(input, provider), description: input.tool_input?.description ?? null };
+}
+
+function toQuestionRequest(input, provider) {
+  const questions = Array.isArray(input.tool_input?.questions) ? input.tool_input.questions : [];
+  return { ...common(input, provider), kind: 'question', questions, description: questions.map(q => q.question).join(' / ') || null };
+}
+
 /** Codex 입력에는 turn_id·model이 있고 tool_use_id가 없다. 설치기가 --provider를 박으므로 이 추정은 보조다. */
 function detectProvider(input) {
   return input.turn_id && !input.tool_use_id ? 'codex' : 'claude';
 }
 
-function emit(decision) {
+function emitPermission(decision) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision } }));
+}
+
+/** 질문 원문은 그대로 두고 answers만 채운다. Claude는 이 입력을 사용자가 답한 것으로 받는다. */
+function emitAnswers(toolInput, answers) {
+  process.stdout.write(
+    JSON.stringify({
+      hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'allow', updatedInput: { ...toolInput, answers } },
+    }),
+  );
 }
 
 async function record(home, config, payload) {
