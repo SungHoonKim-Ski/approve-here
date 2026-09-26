@@ -194,6 +194,7 @@ struct RequestCardView: View {
                 .background(.tint.opacity(0.15), in: Capsule())
             }
             Text(q.question).font(.callout).fontWeight(.medium)
+            if q.multiSelect ?? false { Text("여러 개 선택").font(.caption2).foregroundStyle(.secondary) }
           }
           if let options = q.options, !options.isEmpty {
             if options.contains(where: { !($0.description ?? "").isEmpty }) {
@@ -201,7 +202,7 @@ struct RequestCardView: View {
               ForEach(options, id: \.label) { option in
                 Button { pick(q, option.label) } label: {
                   HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: selected(q).contains(option.label) ? "checkmark.circle.fill" : "circle").padding(.top, 2)
+                    Image(systemName: icon(q, chosen: selected(q).contains(option.label))).padding(.top, 2)
                     VStack(alignment: .leading, spacing: 2) {
                       Text(option.label).fontWeight(.medium)
                       if let d = option.description, !d.isEmpty { Text(d).font(.caption).foregroundStyle(.secondary) }
@@ -226,9 +227,9 @@ struct RequestCardView: View {
         }
       }
       HStack(spacing: 8) {
-        Button("답 보내기") { send() }.tint(.green).disabled(!readyToSend)
+        Button("답 보내기") { send() }.tint(.green).disabled(!readyToSend).keyboardShortcut(.defaultAction)
         Spacer()
-        Text(questions.count > 1 ? "\(draft.count)/\(questions.count) 답함" : "").font(.caption).foregroundStyle(.secondary)
+        Text(questions.count > 1 ? "\(answeredCount)/\(questions.count) 답함" : (readyToSend ? "" : "옵션을 고르거나 직접 입력하세요")).font(.caption).foregroundStyle(.secondary)
       }
       .controlSize(.small)
     }
@@ -248,7 +249,8 @@ struct RequestCardView: View {
     return Set(value.split(separator: ", ").map(String.init))
   }
 
-  /// 단일 선택·질문 하나면 누르는 순간 보낸다. 여러 질문이나 multiSelect는 다 고른 뒤 "답 보내기".
+  /// 옵션은 고르기만 한다. 전송은 언제나 "답 보내기"(또는 Enter)로 — 잘못 누른 것을 바로잡을 틈을 둔다.
+  /// multiSelect는 토글이고, 답은 옵션 순서대로 ", "로 이어 보낸다(Claude가 다중 선택으로 받는 형식, 실측).
   private func pick(_ q: PendingRequest.Question, _ label: String) {
     if q.multiSelect ?? false {
       var set = selected(q)
@@ -256,15 +258,20 @@ struct RequestCardView: View {
       draft[q.question] = set.isEmpty ? nil : (q.options ?? []).map(\.label).filter(set.contains).joined(separator: ", ")
       return
     }
-    draft[q.question] = label
-    if questions.count == 1 { actions.answer(request, draft) }
+    draft[q.question] = draft[q.question] == label ? nil : label
   }
 
+  private func icon(_ q: PendingRequest.Question, chosen: Bool) -> String {
+    (q.multiSelect ?? false) ? (chosen ? "checkmark.square.fill" : "square") : (chosen ? "largecircle.fill.circle" : "circle")
+  }
+
+  private var answeredCount: Int {
+    questions.filter { draft[$0.question] != nil || !(typed[$0.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }.count
+  }
+
+  /// 입력칸에서 Enter: 준비됐으면 보낸다.
   private func submitTyped(_ q: PendingRequest.Question) {
-    let text = (typed[q.question] ?? "").trimmingCharacters(in: .whitespaces)
-    guard !text.isEmpty else { return }
-    draft[q.question] = text
-    if questions.count == 1 { actions.answer(request, draft) }
+    if readyToSend { send() }
   }
 
   private func send() {
