@@ -91,7 +91,11 @@ function summary(r) {
   const command = r.toolInput?.command;
   if (typeof command === 'string') return command.replace(/\s+/g, ' ');
   const path = r.toolInput?.file_path || r.toolInput?.path;
-  return path ? `${r.toolName} ${path}` : `${r.toolName} ${JSON.stringify(r.toolInput)}`;
+  if (path) return `${r.toolName} ${path}`;
+  // AskUserQuestion은 "질문을 띄울 권한" 요청이다. 질문 본문을 보여 주되, 답은 여기서 못 한다.
+  const questions = r.toolInput?.questions;
+  if (Array.isArray(questions)) return `질문 띄우기: ${questions.map(q => q.question).join(' / ')}`;
+  return `${r.toolName} ${JSON.stringify(r.toolInput)}`;
 }
 
 function commandPrefix(r) {

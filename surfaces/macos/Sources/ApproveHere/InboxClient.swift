@@ -15,6 +15,7 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
   var summary: String {
     if case .string(let command)? = toolInput["command"] { return command.replacingOccurrences(of: "\n", with: " ") }
     if case .string(let path)? = toolInput["file_path"] { return "\(toolName) \(path)" }
+    if toolName == "AskUserQuestion" { return "질문 띄우기" }
     return toolName
   }
 

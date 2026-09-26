@@ -67,7 +67,10 @@
   let pending = [], recent = [];
 
   const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const summary = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command : (r.toolInput?.file_path ? `${r.toolName} ${r.toolInput.file_path}` : r.toolName);
+  const summary = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command
+    : r.toolInput?.file_path ? `${r.toolName} ${r.toolInput.file_path}`
+    : Array.isArray(r.toolInput?.questions) ? `질문 띄우기: ${r.toolInput.questions.map(q => q.question).join(' / ')}`
+    : r.toolName;
   const prefix = r => typeof r.toolInput?.command === 'string' ? r.toolInput.command.trim().split(/\s+/).slice(0, 2).join(' ') : null;
   const age = iso => { const s = Math.max(0, Math.round((Date.now() - new Date(iso)) / 1000)); return s < 60 ? `${s}초` : `${Math.round(s / 60)}분`; };
 

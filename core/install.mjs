@@ -23,7 +23,7 @@ export function install({ claude = false, codex = false, home, userHome = homedi
     log(
       '\nCodex는 새 훅을 처음 만나면 신뢰 확인을 요구합니다. `codex`를 실행하고 "Hooks need review"에서 검토·신뢰하거나 `/hooks`에서 처리하세요.\n훅 명령이 바뀌면(경로 변경 등) 다시 신뢰해야 합니다.',
     );
-  log(`\n데이터 폴더: ${home}\n데몬 실행: approve-here start`);
+  log(`\n데이터 폴더: ${home}\n대기함 열기: approve-here (tmux pane) · approve-here app (메뉴바) · approve-here open (브라우저)`);
   return results;
 }
 
