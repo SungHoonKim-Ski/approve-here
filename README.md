@@ -34,19 +34,20 @@ Claude Code / Codex ── PermissionRequest ──▶ hook/permission-hook.mjs
 macOS · Node 20+ · Claude Code 또는 Codex CLI.
 
 ```bash
-git clone https://github.com/SungHoonKim-Ski/approve-here && cd approve-here
-npm link                       # 또는 node bin/approve-here.mjs …
-approve-here install --claude --codex
-approve-here start              # 데몬 (터미널 하나에 두거나 tmux 창 하나)
+npm i -g approve-here
+approve-here install --claude --codex   # ~/.claude/settings.json, ~/.codex/hooks.json에 훅 한 줄씩
+approve-here                            # 터미널(tmux pane)이 대기함이 된다. 데몬은 같이 뜬다.
 ```
 
-표면은 하나 이상 켜 둡니다.
+표면은 셋 중 하나를 열어 둡니다. **표면을 열면 데몬이 같이 뜨고**, 표면도 대기 요청도 없이 10분이 지나면 데몬이 스스로 닫힙니다. 따로 켜 둘 것이 없습니다.
 
 | 표면 | 실행 | 어울리는 사람 |
 |---|---|---|
-| macOS 메뉴바 | `sh surfaces/macos/build.sh && approve-here app` | 어느 앱에 있든 뱃지 ⏳ N을 보고 메뉴·알림 버튼으로 결정 |
-| tmux pane | `approve-here tui` | command-center처럼 tmux에서 worker 창을 여럿 띄우는 사람. `g`로 그 창에 점프 |
-| 브라우저 | `approve-here open` | 다른 기기·폰에서 보고 싶은 사람 (같은 머신 127.0.0.1 기준) |
+| tmux pane | `approve-here` 또는 `approve-here tui` | command-center처럼 tmux에서 worker 창을 여럿 띄우는 사람. `g`로 그 창에 점프 |
+| macOS 메뉴바 | `approve-here app` | 어느 앱에 있든 뱃지 ⏳ N을 보고 메뉴·알림 버튼으로 결정. 처음 실행 시 [Release](https://github.com/SungHoonKim-Ski/approve-here/releases)에서 앱을 내려받는다 |
+| 브라우저 | `approve-here open` | 폰·다른 창에서 보고 싶은 사람 (같은 머신 127.0.0.1 기준) |
+
+메뉴바 앱은 Apple 서명·공증이 없습니다. 내려받은 뒤 `approve-here app`이 격리 속성을 지울지 묻고, 거절하면 처음 한 번 시스템 설정 → 개인정보 보호 및 보안에서 "그래도 열기"를 눌러야 합니다.
 
 Codex는 새 훅을 처음 만나면 **신뢰 확인**을 요구합니다. `codex`를 실행해 "Hooks need review"에서 검토·신뢰하거나 `/hooks`에서 처리하세요. 훅 명령이 바뀌면 다시 신뢰해야 합니다.
 
@@ -93,7 +94,7 @@ Codex는 새 훅을 처음 만나면 **신뢰 확인**을 요구합니다. `code
 ## 개발
 
 ```bash
-npm test                        # node --test, 25개
+npm test                        # node --test, 29개
 sh surfaces/macos/build.sh      # SwiftPM만으로 .app 번들 (Xcode 불필요)
 APPROVE_HERE_HOME=/tmp/x approve-here start --port 4411   # 격리 실행
 ```

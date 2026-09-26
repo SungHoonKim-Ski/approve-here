@@ -18,6 +18,8 @@ export const DEFAULTS = Object.freeze({
   requireSurface: true,
   // 표면이 마지막으로 다녀간 뒤 이 시간(초) 안이면 활성으로 본다.
   presenceSeconds: 10,
+  // 표면도 대기 요청도 없이 이 시간(초)이 지나면 데몬이 스스로 종료한다. 0이면 끄지 않는다.
+  idleExitSeconds: 600,
 });
 
 export function inboxHome() {

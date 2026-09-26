@@ -20,6 +20,25 @@
   ],
   "scripts": {
     "start": "node bin/approve-here.mjs start",
-    "test": "node --test --test-timeout=15000 tests/*.test.mjs"
+    "test": "node --test --test-timeout=15000 tests/*.test.mjs",
+    "prepublishOnly": "npm test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SungHoonKim-Ski/approve-here.git"
+  },
+  "homepage": "https://github.com/SungHoonKim-Ski/approve-here#readme",
+  "bugs": "https://github.com/SungHoonKim-Ski/approve-here/issues",
+  "keywords": [
+    "claude-code",
+    "codex",
+    "hooks",
+    "permission",
+    "approval",
+    "tmux",
+    "menubar"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }

@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { Store, PENDING } from './store.mjs';
 import { ensureHome, ensureToken, loadConfig, readAllowlist, writeAllowlist, writeDaemonInfo } from './config.mjs';
@@ -20,17 +20,37 @@ class HttpError extends Error {
  * 로컬 대기함 데몬. 훅이 요청을 올리고 결정을 기다리며, 표면(메뉴바·TUI·웹)이 목록을 읽고 결정을 쓴다.
  * 127.0.0.1에만 묶고 같은 사용자만 읽을 수 있는 token 파일로 호출자를 가른다.
  */
-export async function startDaemon({ home, port, tmux = defaultTmux, presenceSeconds } = {}) {
+export async function startDaemon({
+  home,
+  port,
+  tmux = defaultTmux,
+  presenceSeconds,
+  idleExitMs,
+  idleCheckMs = 30000,
+  onIdle = () => {},
+} = {}) {
   const root = ensureHome(home);
   const config = loadConfig(root);
   const token = ensureToken(root);
   const store = new Store(root);
   const listenPort = port ?? config.port;
   const presenceMs = (presenceSeconds ?? config.presenceSeconds) * 1000;
+  const idleMs = idleExitMs ?? config.idleExitSeconds * 1000;
   let lastSurfaceAt = 0;
+  let lastActivityAt = Date.now();
   const server = createServer((req, res) => handle(req, res).catch(error => fail(res, error)));
 
   const surfaceActive = () => Date.now() - lastSurfaceAt < presenceMs;
+  store.subscribe(() => (lastActivityAt = Date.now()));
+  // 표면도 대기 요청도 없이 오래 놀면 물러난다. 표면이 다시 열리면 ensureDaemon이 새로 띄운다.
+  const idleTimer =
+    idleMs > 0
+      ? setInterval(() => {
+          const quiet = Math.max(lastActivityAt, lastSurfaceAt);
+          if (!surfaceActive() && store.list(PENDING).length === 0 && Date.now() - quiet > idleMs) onIdle();
+        }, idleCheckMs)
+      : null;
+  idleTimer?.unref();
 
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
@@ -125,7 +145,17 @@ export async function startDaemon({ home, port, tmux = defaultTmux, presenceSeco
     port: actualPort,
     token,
     store,
-    close: () => new Promise(resolve => server.close(resolve)),
+    close: () =>
+      new Promise(resolve => {
+        if (idleTimer) clearInterval(idleTimer);
+        server.close(() => {
+          // 죽은 데몬의 기록이 남으면 ensureDaemon이 health 실패로 걸러내지만, 깨끗이 지우는 쪽이 낫다.
+          try {
+            rmSync(join(root, 'daemon.json'), { force: true });
+          } catch {}
+          resolve();
+        });
+      }),
   };
 }
 

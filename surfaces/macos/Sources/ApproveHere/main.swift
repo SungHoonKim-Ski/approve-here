@@ -33,9 +33,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       } catch {
         daemonUp = false
         pending = []
+        ensureDaemon()
       }
       render()
     }
+  }
+
+  private var lastEnsureAt = Date.distantPast
+
+  /// 표면이 데몬을 데리고 다닌다. 데몬이 없으면 CLI에 띄워 달라고 한다(로그인 셸로 PATH를 얻는다). 15초에 한 번만.
+  private func ensureDaemon() {
+    guard Date().timeIntervalSince(lastEnsureAt) > 15 else { return }
+    lastEnsureAt = Date()
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    process.arguments = ["-lc", "command -v approve-here >/dev/null && approve-here ensure-daemon"]
+    process.standardOutput = nil
+    process.standardError = nil
+    try? process.run()
   }
 
   // MARK: 메뉴
