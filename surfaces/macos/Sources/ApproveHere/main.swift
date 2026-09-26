@@ -108,8 +108,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   private func render() {
     let connected = Provider.allCases.filter(HookConnections.isConnected)
-    item.button?.title = node == nil ? "⚠︎" : !daemonUp ? "⏸" : pending.isEmpty ? (connected.isEmpty ? "○" : "✓") : "⏳ \(pending.count)"
-    item.button?.toolTip = "Approve Here · \(pending.count)건 대기"
+    // 글자 하나짜리 아이콘은 다른 상태 아이콘 사이에서 안 보인다. 받은편지함 모양으로 두고, 대기 수만 글자로 붙인다.
+    let symbol = node == nil ? "exclamationmark.triangle" : !daemonUp ? "tray" : pending.isEmpty ? (connected.isEmpty ? "tray" : "tray.full") : "tray.and.arrow.down.fill"
+    if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Approve Here") {
+      image.isTemplate = true
+      item.button?.image = image
+      item.button?.imagePosition = pending.isEmpty ? .imageOnly : .imageLeading
+    }
+    item.button?.title = pending.isEmpty ? "" : " \(pending.count)"
+    item.button?.toolTip = "Approve Here · \(pending.count)건 대기 · \(connected.map(\.title).joined(separator: ", "))"
     let menu = NSMenu()
 
     if node == nil {
