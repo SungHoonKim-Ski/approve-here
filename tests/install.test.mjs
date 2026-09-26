@@ -26,6 +26,8 @@ test('빈 홈에 Claude·Codex 훅을 등록하고, 두 번 실행해도 항목�
   const codex = JSON.parse(readFileSync(join(userHome, '.codex/hooks.json'), 'utf8'));
   assert.match(codex.hooks.PermissionRequest[0].hooks[0].command, /--provider codex$/);
   assert.equal(codex.hooks.PreToolUse, undefined, 'Codex에는 AskUserQuestion이 없다');
+  assert.equal(codex.hooks.PostToolUse[0].matcher, 'Bash', 'Codex는 Bash가 끝난 신호로 mirror 카드를 지운다');
+  assert.equal(claude.hooks.PostToolUse[0].matcher, 'AskUserQuestion');
   assert.ok(logs.some(m => m.includes('Hooks need review')), 'Codex 신뢰 안내를 출력한다');
 });
 
@@ -67,6 +69,7 @@ test('uninstall은 우리 항목만 걷어낸다', () => {
   const settings = JSON.parse(readFileSync(path, 'utf8'));
   assert.equal(settings.hooks.PermissionRequest, undefined);
   assert.equal(settings.hooks.PreToolUse, undefined);
+  assert.equal(settings.hooks.PostToolUse, undefined);
 });
 
 test('provider를 지정하지 않으면 거절한다', () => {

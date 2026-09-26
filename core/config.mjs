@@ -7,6 +7,11 @@ export const DEFAULTS = Object.freeze({
   port: 4400,
   // 훅이 사용자 결정을 기다리는 상한(초). 넘기면 결정 없이 끝내 CLI의 원래 프롬프트로 후퇴한다.
   waitSeconds: 300,
+  // CLI가 자기 프롬프트를 숨기는 요청(질문, Codex 승인)은 이 시간(초) 안에 답이 없으면 물러나 CLI에 원래
+  // 프롬프트가 뜨게 한다 — 카드를 놓친 사람도 터미널에서 답할 수 있어야 한다. Claude 승인은 터미널에도 함께 뜨므로 해당 없음.
+  handoffSeconds: 20,
+  // tmux 안의 세션이면 질문·Codex 승인을 터미널과 카드 양쏙에 띄우고 먼저 답한 쪽이 이긴다(카드 결정은 tmux 키로 전달).
+  mirror: true,
   // 사용자 정책 훅 하나에 허용하는 실행 시간(초).
   policyTimeoutSeconds: 60,
   // provider별 사용자 정책 훅 명령. 훅 프로세스 안에서 순서대로 실행하고 첫 결정을 따른다.

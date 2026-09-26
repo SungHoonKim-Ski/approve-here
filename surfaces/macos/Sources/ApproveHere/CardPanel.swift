@@ -17,6 +17,10 @@ final class CardPanelController {
   private var hidden: Set<String> = []
   private let actions: Actions
   private let width: CGFloat = 400
+  /// 화면을 다 덮지 않도록 이 수까지만 펼친다. 나머지는 "N건 더" 한 줄로 접힌다.
+  private let maxVisible = 2
+  private var expanded = false
+  private var summary: NSPanel?
 
   init(actions: Actions) { self.actions = actions }
 
@@ -27,10 +31,50 @@ final class CardPanelController {
       panels.removeValue(forKey: id)
     }
     hidden = hidden.intersection(ids)
-    for request in pending where panels[request.id] == nil && !hidden.contains(request.id) {
+    if pending.count <= maxVisible { expanded = false }
+    let visible = expanded ? pending : Array(pending.prefix(maxVisible))
+    // 접힌 카드는 패널을 내린다(메뉴에는 남는다).
+    for request in pending where !visible.contains(where: { $0.id == request.id }) {
+      panels[request.id]?.orderOut(nil)
+      panels.removeValue(forKey: request.id)
+    }
+    for request in visible where panels[request.id] == nil && !hidden.contains(request.id) {
       panels[request.id] = makePanel(for: request)
     }
-    layout(order: (panels["demo"] != nil ? ["demo"] : []) + pending.map(\.id))
+    updateSummary(total: pending.count)
+    layout(order: (panels["demo"] != nil ? ["demo"] : []) + visible.map(\.id))
+  }
+
+  /// "N건 더 · 펼치기" / "접기" 한 줄. 카드가 maxVisible을 넘을 때만 보인다.
+  private func updateSummary(total: Int) {
+    guard total > maxVisible else {
+      summary?.orderOut(nil)
+      summary = nil
+      return
+    }
+    let hiddenCount = total - maxVisible
+    let view = QueueSummaryView(total: total, hiddenCount: hiddenCount, expanded: expanded) { [weak self] in
+      guard let self else { return }
+      self.expanded.toggle()
+      Runtime.log("queue \(self.expanded ? "expanded" : "collapsed") total=\(total)")
+      NotificationCenter.default.post(name: .approveHereResync, object: nil)
+    }
+    if summary == nil {
+      let panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 10), styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+      panel.level = .statusBar
+      panel.isOpaque = false
+      panel.backgroundColor = .clear
+      panel.hasShadow = true
+      panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+      panel.hidesOnDeactivate = false
+      panel.isReleasedWhenClosed = false
+      summary = panel
+    }
+    let hosting = NSHostingView(rootView: view)
+    hosting.frame = NSRect(x: 0, y: 0, width: width, height: 10)
+    summary?.contentView = hosting
+    summary?.setContentSize(fit(hosting))
+    summary?.orderFrontRegardless()
   }
 
   /// 메뉴에서 "카드 다시 열기"를 눌렀을 때.
@@ -111,7 +155,11 @@ final class CardPanelController {
       panel.setFrameOrigin(NSPoint(x: frame.maxX - size.width - 12, y: top - size.height))
       top -= size.height + 10
     }
-    if !order.isEmpty { Runtime.log("card layout screen=\(frame) frames=\(order.compactMap { panels[$0]?.frame })") }
+    if let summary {
+      let size = summary.frame.size
+      summary.setFrameOrigin(NSPoint(x: frame.maxX - size.width - 12, y: top - size.height))
+    }
+    if !order.isEmpty { Runtime.log("card layout screen=\(frame) frames=\(order.compactMap { panels[$0]?.frame } + (summary.map { [$0.frame] } ?? []))") }
   }
 }
 
@@ -138,12 +186,26 @@ struct RequestCardView: View {
         Text(working).font(.caption).foregroundStyle(.secondary).lineLimit(2)
       }
       if request.isQuestion { questionBody } else { permissionBody }
+      handoffLine
     }
     .padding(12)
     .frame(width: 400, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)
     .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
     .overlay(RoundedRectangle(cornerRadius: 12).stroke(.quaternary))
+  }
+
+  /// 터미널과의 관계를 한 줄로. mirror면 양쪽에 떠 있고, wait+handoffAt이면 그 시각에 터미널로 넘어간다.
+  @ViewBuilder private var handoffLine: some View {
+    if request.isMirror {
+      Text("터미널에도 떠 있습니다 · 어느 쪽에서 답해도 됩니다").font(.caption2).foregroundStyle(.secondary)
+    } else if let handoff = request.handoffDate {
+      TimelineView(.periodic(from: .now, by: 1)) { context in
+        let remaining = Int(handoff.timeIntervalSince(context.date).rounded(.up))
+        Text(remaining > 0 ? "\(remaining)초 안에 답하지 않으면 터미널에 원래 질문이 뜹니다" : "터미널로 넘어갔습니다")
+          .font(.caption2).foregroundStyle(.secondary)
+      }
+    }
   }
 
   /// 어느 세션인지: [claude] 프로젝트 · 창 이름. 창 이름이 없으면 도구 이름.
@@ -312,5 +374,32 @@ struct FlowButtons: View {
         }
       }
     }
+  }
+}
+
+
+extension Notification.Name {
+  /// 요약 패널의 펼치기/접기 뒤 카드 배치를 다시 하라는 신호.
+  static let approveHereResync = Notification.Name("approveHereResync")
+}
+
+/// 카드가 maxVisible을 넘을 때 그 아래 붙는 한 줄.
+struct QueueSummaryView: View {
+  let total: Int
+  let hiddenCount: Int
+  let expanded: Bool
+  let toggle: () -> Void
+
+  var body: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "tray.full")
+      Text(expanded ? "요청 \(total)건 모두 펼침" : "요청 \(total)건 · \(hiddenCount)건 더 있음").font(.callout)
+      Spacer()
+      Button(expanded ? "접기" : "펼치기") { toggle() }.controlSize(.small)
+    }
+    .padding(.horizontal, 12).padding(.vertical, 8)
+    .frame(width: 400, alignment: .leading)
+    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10))
+    .overlay(RoundedRectangle(cornerRadius: 10).stroke(.quaternary))
   }
 }

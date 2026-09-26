@@ -39,7 +39,7 @@ test('표면이 없으면 훅은 데몬이 떠 있어도 기다리지 않고 즉
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   const daemon = await startDaemon({ home, port: 0 });
   t.after(() => daemon.close());
-  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 30 }));
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 30, mirror: false }));
   const t0 = Date.now();
   const r = await runHook({ APPROVE_HERE_HOME: home });
   assert.equal(r.code, 0);
@@ -54,7 +54,7 @@ test('requireSurface=false면 표면이 없어도 기다린다', async t => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   const daemon = await startDaemon({ home, port: 0 });
   t.after(() => daemon.close());
-  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 0.5, requireSurface: false }));
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 0.5, requireSurface: false, mirror: false }));
   const t0 = Date.now();
   const r = await runHook({ APPROVE_HERE_HOME: home });
   assert.equal(r.stdout.trim(), '');

@@ -22,7 +22,7 @@ async function bootDaemon(t, config = {}) {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   const daemon = await startDaemon({ home, port: 0 });
   t.after(() => daemon.close());
-  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 5, ...config }));
+  writeFileSync(join(home, 'config.json'), JSON.stringify({ port: daemon.port, waitSeconds: 5, mirror: false, ...config }));
   const headers = { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' };
   const api = (path, init = {}) => fetch(`http://127.0.0.1:${daemon.port}${path}`, { ...init, headers });
   await api('/requests'); // 표면이 보고 있는 상태

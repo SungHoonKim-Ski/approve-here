@@ -28,6 +28,12 @@ async function main() {
   const provider = argument('--provider') || detectProvider(input);
   const question = input.hook_event_name === 'PreToolUse' && input.tool_name === 'AskUserQuestion';
   if (input.hook_event_name === 'PreToolUse' && !question) return; // 다른 PreToolUse는 우리 일이 아니다
+  if (input.hook_event_name === 'PostToolUse') {
+    // 도구가 끝났다 = 터미널에서 답했다. 같은 세션의 mirror 카드를 지운다. 결정과 무관하니 출력은 없다.
+    const client = apiClient(home, config);
+    if (client) await client.post('/external', { sessionId: input.session_id ?? null, toolUseId: input.tool_use_id ?? null, toolName: input.tool_name });
+    return;
+  }
 
   // "질문을 띄울 권한"은 묻지 않는다. 질문 자체는 PreToolUse 카드(또는 원래 다이얼로그)가 받는다.
   // 여기서 한 번 더 물으면 질문 하나에 카드가 두 장 뜬다.
@@ -67,9 +73,20 @@ async function main() {
       return;
     }
   }
-  const created = await client.post('/requests', request);
+  // 질문과 Codex 승인은 훅이 기다리는 동안 CLI가 자기 프롬프트를 숨긴다. 카드를 놓친 사람도 터미널에서 답할 수 있어야 한다.
+  //  - tmux 안이면(mirror): 바로 물러나 터미널에 다이얼로그를 띄우고, 카드의 결정은 데몬이 그 pane에 키로 넣는다. 먼저 답한 쪽이 이긴다.
+  //  - tmux 밖이면: handoffSeconds 동안만 카드를 기다리고 물러난다.
+  // Claude 승인은 터미널에도 함께 뜨므로 waitSeconds까지 기다린다.
+  const hidesPrompt = question || provider === 'codex';
+  const mirror = hidesPrompt && Boolean(request.tmux?.pane) && config.mirror !== false;
+  if (mirror) {
+    await client.post('/requests', { ...request, mode: 'mirror', handoffAt: null });
+    return;
+  }
+  const waitMs = (hidesPrompt ? Math.min(config.handoffSeconds, config.waitSeconds) : config.waitSeconds) * 1000;
+  const deadline = Date.now() + waitMs;
+  const created = await client.post('/requests', { ...request, handoffAt: hidesPrompt ? new Date(deadline).toISOString() : null });
   if (!created?.id) return;
-  const deadline = Date.now() + config.waitSeconds * 1000;
   while (Date.now() < deadline) {
     const remaining = Math.max(0.05, (deadline - Date.now()) / 1000);
     const state = await client.get(`/requests/${created.id}/wait?timeout=${Math.min(POLL_SECONDS, remaining)}`);
@@ -77,12 +94,12 @@ async function main() {
     if (state.status === 'pending') continue;
     if (question) {
       if (state.status === 'answered' && state.decision?.answers) emitAnswers(input.tool_input, state.decision.answers);
-      return; // passed·expired: 출력 없음 → 원래 다이얼로그
+      return; // passed·handed_off·expired: 출력 없음 → 원래 다이얼로그
     }
     if (state.decision?.behavior) emitPermission(state.decision);
     return;
   }
-  await client.post(`/requests/${created.id}/expire`, {});
+  await client.post(`/requests/${created.id}/${hidesPrompt ? 'handoff' : 'expire'}`, {});
 }
 
 async function decideByPolicy(request, raw, config, home) {

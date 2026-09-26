@@ -65,7 +65,20 @@ export async function startDaemon({
 
     if (resource === 'requests' && !id) {
       if (req.method === 'GET') return json(res, 200, store.list(url.searchParams.get('status') || PENDING));
-      if (req.method === 'POST') return json(res, 201, { id: store.create(await describeTmux(validateRequest(await body(req)))).id });
+      if (req.method === 'POST') {
+        const input = validateRequest(await body(req));
+        // 같은 세션에서 사용자에게 갈 새 요청이 왔으면 이전 다이얼로그는 이미 닫혔다(답했거나 Esc).
+        // 자동 처리 기록(auto·skipped)과 질문 도구 자체의 권한 요청은 다이얼로그가 살아 있는 채로 함께 오므로 밀어내지 않는다.
+        const supersedes = !input.status && !(input.toolName === 'AskUserQuestion' && input.kind !== 'question');
+        if (supersedes) for (const stale of store.pendingMirror({ sessionId: input.sessionId })) store.expire(stale.id, 'answered_externally');
+        return json(res, 201, { id: store.create(await describeTmux(input)).id });
+      }
+    }
+    // 터미널에서 답했다는 신호(PostToolUse). 같은 세션의 mirror 요청을 외부 처리로 마감한다.
+    if (resource === 'external' && req.method === 'POST') {
+      const input = await body(req);
+      const settled = store.pendingMirror({ sessionId: input.sessionId, toolUseId: input.toolUseId ?? null }).map(r => store.expire(r.id, 'answered_externally'));
+      return json(res, 200, { settled: settled.length });
     }
     if (resource === 'requests' && id) {
       const record = store.get(id);
@@ -76,8 +89,10 @@ export async function startDaemon({
         const settled = await store.wait(id, Math.max(0, seconds) * 1000);
         return json(res, 200, { status: settled.status, decision: settled.decision });
       }
-      if (req.method === 'POST' && action === 'decision') return json(res, 200, decide(record, validateDecision(await body(req))));
+      if (req.method === 'POST' && action === 'decision') return json(res, 200, await decide(record, validateDecision(await body(req))));
       if (req.method === 'POST' && action === 'expire') return json(res, 200, store.expire(id));
+      // 훅이 물러나 CLI에 원래 프롬프트가 떴다. 카드는 사라지고 기록에는 handed_off로 남는다.
+      if (req.method === 'POST' && action === 'handoff') return json(res, 200, store.expire(id, 'handed_off'));
       if (req.method === 'POST' && action === 'jump') {
         const result = await tmux.jump({ pane: record.tmux?.pane });
         return json(res, result.ok ? 200 : 409, result);
@@ -101,6 +116,21 @@ export async function startDaemon({
     throw new HttpError(404, '알 수 없는 경로입니다.');
   }
 
+  /**
+   * mirror 요청: 훅은 이미 물러났고 터미널에 다이얼로그가 떠 있다. 카드의 결정을 그 다이얼로그에 키로 넣는다.
+   * 다이얼로그가 이미 사라졌으면(터미널에서 답함) 카드 결정은 거절하고 요청을 외부 처리로 마감한다.
+   */
+  async function driveTerminal(record, decision) {
+    if (typeof tmux.drive !== 'function') throw new HttpError(409, '이 요청은 터미널에서만 답할 수 있습니다.');
+    const result = await tmux.drive(record, decision).catch(error => ({ ok: false, reason: error.message }));
+    if (!result.ok) {
+      store.expire(record.id, 'answered_externally');
+      throw new HttpError(409, '터미널 다이얼로그를 찾지 못했습니다 — 그 세션에서 이미 답했거나 닫혔습니다.');
+    }
+    // 키를 넣는 사이 PostToolUse가 먼저 와서 answered_externally로 마감됐을 수 있다. 그때는 현재 레코드를 돌려준다.
+    return store.decide(record.id, decision, 'user:tmux') ?? store.get(record.id);
+  }
+
   /** tmux 창 이름은 그 세션이 무슨 일인지 말해 준다(작업 이름으로 창을 짓는 사람이 많다). 훅은 pane id만 아니까 여기서 붙인다. */
   async function describeTmux(input) {
     if (!input.tmux?.pane || typeof tmux.describe !== 'function') return input;
@@ -113,15 +143,17 @@ export async function startDaemon({
     if (given !== token) throw new HttpError(401, '토큰이 없거나 다릅니다.');
   }
 
-  function decide(record, input) {
+  async function decide(record, input) {
     if (record.status !== PENDING) throw new HttpError(409, `이미 ${record.status} 상태인 요청입니다.`);
     if (record.kind === 'question') {
       if (input.behavior) throw new HttpError(400, '질문 카드에는 answers 또는 passthrough를 보내세요.');
       const decision = input.passthrough ? { passthrough: true } : { answers: input.answers };
+      if (record.mode === 'mirror' && !input.passthrough) return await driveTerminal(record, decision);
       return store.decide(record.id, decision, 'user');
     }
     if (input.answers || input.passthrough) throw new HttpError(400, '권한 카드에는 behavior(allow|deny)를 보내세요.');
     const decision = input.message ? { behavior: input.behavior, message: input.message } : { behavior: input.behavior };
+    if (record.mode === 'mirror') return await driveTerminal(record, decision);
     const decided = store.decide(record.id, decision, 'user');
     if (input.behavior === 'allow' && input.remember?.commandPrefix) {
       const rule = { tool: record.toolName, commandPrefix: input.remember.commandPrefix, provider: record.provider };
@@ -187,6 +219,7 @@ function validateRequest(input) {
   if (input.status !== undefined && !['pending', 'auto', 'skipped'].includes(input.status))
     throw new HttpError(400, 'status는 pending·auto·skipped 중 하나여야 합니다.');
   if (input.kind === 'question' && !Array.isArray(input.questions)) throw new HttpError(400, '질문 카드에는 questions 배열이 필요합니다.');
+  if (input.mode !== undefined && !['wait', 'mirror'].includes(input.mode)) throw new HttpError(400, 'mode는 wait 또는 mirror여야 합니다.');
   return input;
 }
 

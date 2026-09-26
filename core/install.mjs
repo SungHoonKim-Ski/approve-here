@@ -14,9 +14,10 @@ export function hookCommand(provider, hookPath = HOOK_PATH) {
  * Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
  */
 export function hookEvents(provider) {
+  // PostToolUse는 "터미널에서 답했다"는 신호다 — 양쪽에 떠 있던 카드를 지운다.
   return provider === 'claude'
-    ? [{ event: 'PermissionRequest' }, { event: 'PreToolUse', matcher: 'AskUserQuestion' }]
-    : [{ event: 'PermissionRequest' }];
+    ? [{ event: 'PermissionRequest' }, { event: 'PreToolUse', matcher: 'AskUserQuestion' }, { event: 'PostToolUse', matcher: 'AskUserQuestion' }]
+    : [{ event: 'PermissionRequest' }, { event: 'PostToolUse', matcher: 'Bash' }];
 }
 
 /**
@@ -63,7 +64,7 @@ export function uninstallFrom(path) {
   if (!current.hooks || typeof current.hooks !== 'object') return { path, changed: false };
   const hooks = { ...current.hooks };
   let changed = false;
-  for (const event of ['PermissionRequest', 'PreToolUse']) {
+  for (const event of ['PermissionRequest', 'PreToolUse', 'PostToolUse']) {
     const groups = hooks[event];
     if (!Array.isArray(groups)) continue;
     const kept = withoutOurs(groups);

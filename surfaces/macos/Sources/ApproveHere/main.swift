@@ -52,6 +52,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     render()
     bootstrap()
     timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in self?.poll() }
+    NotificationCenter.default.addObserver(forName: .approveHereResync, object: nil, queue: .main) { [weak self] _ in self?.poll() }
   }
 
   func applicationWillTerminate(_ notification: Notification) {

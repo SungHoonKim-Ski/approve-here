@@ -15,10 +15,11 @@ enum Provider: String, CaseIterable {
   }
 
   /// 훅이 서는 이벤트. Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
+  /// PostToolUse는 "터미널에서 답했다"는 신호 — 양쪽에 떠 있던 카드를 지운다.
   var events: [(event: String, matcher: String?)] {
     self == .claude
-      ? [("PermissionRequest", nil), ("PreToolUse", "AskUserQuestion")]
-      : [("PermissionRequest", nil)]
+      ? [("PermissionRequest", nil), ("PreToolUse", "AskUserQuestion"), ("PostToolUse", "AskUserQuestion")]
+      : [("PermissionRequest", nil), ("PostToolUse", "Bash")]
   }
 }
 

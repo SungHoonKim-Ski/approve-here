@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { ensureHome } from './config.mjs';
 
 export const PENDING = 'pending';
-const FINAL = new Set(['allowed', 'denied', 'answered', 'passed', 'expired', 'auto', 'skipped']);
+const FINAL = new Set(['allowed', 'denied', 'answered', 'answered_externally', 'passed', 'handed_off', 'expired', 'auto', 'skipped']);
 const PRESET = new Set(['auto', 'skipped']);
 const RECENT_LIMIT = 100;
 
@@ -38,6 +38,10 @@ export class Store {
       model: input.model ?? null,
       tmux: input.tmux ?? null,
       context: input.context ?? null,
+      // 이 시각이 지나면 훅이 물러나 CLI에 원래 프롬프트가 뜬다. null이면 CLI가 이미 함께 띄우고 있다.
+      handoffAt: input.handoffAt ?? null,
+      // wait: 훅이 결정을 기다림 · mirror: 훅은 물러났고 터미널 다이얼로그가 떠 있음(카드 결정은 tmux 키로 전달)
+      mode: input.mode === 'mirror' ? 'mirror' : 'wait',
       status,
       decision: status === 'auto' ? input.decision ?? null : null,
       decidedBy: status === 'auto' ? input.decidedBy ?? 'policy' : status === 'skipped' ? input.decidedBy ?? 'no-surface' : null,
@@ -65,6 +69,13 @@ export class Store {
       .slice(0, RECENT_LIMIT);
   }
 
+  /** 같은 세션의 대기 중 mirror 요청들 — 터미널에서 답했거나 닫혔으면 다이얼로그는 이미 없다. */
+  pendingMirror({ sessionId, toolUseId = null }) {
+    return [...this.requests.values()].filter(
+      r => r.status === PENDING && r.mode === 'mirror' && r.sessionId === sessionId && (toolUseId === null || r.toolUseId === null || r.toolUseId === toolUseId),
+    );
+  }
+
   decide(id, decision, decidedBy = 'user') {
     const current = this.requests.get(id);
     if (!current || current.status !== PENDING) return null;
@@ -74,11 +85,11 @@ export class Store {
     return next;
   }
 
-  expire(id) {
+  expire(id, status = 'expired') {
     const current = this.requests.get(id);
     if (!current || current.status !== PENDING) return current ?? null;
-    const next = Object.freeze({ ...current, status: 'expired', updatedAt: new Date().toISOString() });
-    this.settle(next, 'expired');
+    const next = Object.freeze({ ...current, status, updatedAt: new Date().toISOString() });
+    this.settle(next, status);
     return next;
   }
 

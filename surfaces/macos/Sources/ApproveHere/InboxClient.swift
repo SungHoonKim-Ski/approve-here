@@ -34,8 +34,15 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
   let createdAt: String
   let tmux: Tmux?
   let context: Context?
+  /// wait: 훅이 카드 결정을 기다림 · mirror: 터미널 다이얼로그도 떠 있고 먼저 답한 쪽이 이김
+  let mode: String?
+  /// wait 모드에서 이 시각이 지나면 훅이 물러나 터미널에 원래 프롬프트가 뜬다.
+  let handoffAt: String?
 
   var isQuestion: Bool { kind == "question" }
+  var isMirror: Bool { mode == "mirror" }
+
+  var handoffDate: Date? { handoffAt.flatMap { ISO8601DateFormatter.withFractions.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) } }
 
   /// 어느 세션인지 알아보는 한 줄: tmux 창 이름이 있으면 그것, 없으면 마지막 사용자 요청.
   var sessionLine: String? {
@@ -65,6 +72,14 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
   }
 
   static let neverRemember: Set<String> = ["rm", "sudo", "dd", "mkfs", "kill", "killall", "shutdown", "reboot", "chmod", "chown", "curl", "wget"]
+}
+
+extension ISO8601DateFormatter {
+  static let withFractions: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+  }()
 }
 
 /// tool_input은 도구마다 모양이 달라 느슨하게 받는다.
