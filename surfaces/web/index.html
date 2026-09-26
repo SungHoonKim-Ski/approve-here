@@ -111,7 +111,7 @@
   // ---- 체험(가짜 세션) ----
   const fake = [
     { provider: 'claude', project: 'shop-fe', toolName: 'Bash', toolInput: { command: 'npm run build' }, tmux: { pane: '%3' } },
-    { provider: 'codex', project: 'shop-be', toolName: 'Bash', toolInput: { command: "printf 'hello\\n' >> README.md", description: '현재 환경이 읽기 전용이므로 README.md에 쓰기 권한을 허용할까요?' }, tmux: { pane: '%7' } },
+    { provider: 'codex', project: 'shop-be', toolName: 'Bash', toolInput: { command: "printf 'hello\\n' >> README.md" }, description: '현재 환경이 읽기 전용이므로 README.md에 쓰기 권한을 허용할까요?', tmux: { pane: '%7' } },
     { provider: 'claude', project: 'infra', toolName: 'Bash', toolInput: { command: 'rm -rf build/ && terraform apply -auto-approve' }, tmux: { pane: '%9' } },
     { provider: 'codex', project: 'shop-fe', toolName: 'Bash', toolInput: { command: 'git push origin feature/cart' } },
   ];
@@ -144,6 +144,9 @@
       else await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
     } catch (err) { $('state').textContent = `실패: ${err.message}`; btn.disabled = false; }
   });
+
+  // token은 hash로 오므로, 같은 탭에서 hash만 바뀌면 다시 읽도록 새로 고친다.
+  window.addEventListener('hashchange', () => location.reload());
 
   if (demoMode) {
     $('demo').hidden = false;
