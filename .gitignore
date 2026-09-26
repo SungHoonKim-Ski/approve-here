@@ -2,3 +2,4 @@ node_modules/
 .DS_Store
 surfaces/macos/.build/
 surfaces/macos/dist/
+surfaces/macos/icon/AppIcon.iconset/

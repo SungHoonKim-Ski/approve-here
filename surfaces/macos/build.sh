@@ -15,6 +15,9 @@ for d in bin core hook; do cp -R "$ROOT/$d" "$APP/Contents/Resources/core/"; don
 mkdir -p "$APP/Contents/Resources/core/surfaces"
 cp -R "$ROOT/surfaces/tui" "$ROOT/surfaces/web" "$APP/Contents/Resources/core/surfaces/"
 cp "$ROOT/package.json" "$APP/Contents/Resources/core/"
+# 앱 아이콘(icon/make-icon.swift로 만든 icns)
+[ -f icon/AppIcon.icns ] || { swift icon/make-icon.swift icon/AppIcon.iconset >/dev/null && iconutil -c icns icon/AppIcon.iconset -o icon/AppIcon.icns; }
+cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -28,6 +31,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>LSMinimumSystemVersion</key><string>13.0</string>
   <key>LSUIElement</key><true/>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST

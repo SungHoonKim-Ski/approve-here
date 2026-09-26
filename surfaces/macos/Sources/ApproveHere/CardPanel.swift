@@ -21,7 +21,7 @@ final class CardPanelController {
   init(actions: Actions) { self.actions = actions }
 
   func sync(_ pending: [PendingRequest]) {
-    let ids = Set(pending.map(\.id))
+    let ids = Set(pending.map(\.id) + ["demo"])
     for (id, panel) in panels where !ids.contains(id) {
       panel.orderOut(nil)
       panels.removeValue(forKey: id)
@@ -30,7 +30,7 @@ final class CardPanelController {
     for request in pending where panels[request.id] == nil && !hidden.contains(request.id) {
       panels[request.id] = makePanel(for: request)
     }
-    layout(order: pending.map(\.id))
+    layout(order: (panels["demo"] != nil ? ["demo"] : []) + pending.map(\.id))
   }
 
   /// 메뉴에서 "카드 다시 열기"를 눌렀을 때.
@@ -38,7 +38,28 @@ final class CardPanelController {
     hidden.remove(id)
   }
 
-  private func makePanel(for request: PendingRequest) -> NSPanel {
+  /// 시작 안내의 "카드 시험해 보기". 데몬을 거치지 않는 가짜 카드 — 버튼을 누르면 사라지기만 한다.
+  func showDemo() {
+    let sample = """
+    {"id":"demo","kind":"permission","provider":"claude","project":"my-app","toolName":"Bash",
+     "toolInput":{"command":"npm test -- --watch=false","description":"변경한 결제 모듈의 테스트를 돌릴까요?"},
+     "description":"변경한 결제 모듈의 테스트를 돌릴까요?","createdAt":"\(ISO8601DateFormatter().string(from: Date()))",
+     "tmux":{"pane":null,"title":"결제-환불"},
+     "context":{"task":"환불 API를 추가하고 테스트를 통과시켜 줘","latest":"환불 API를 추가하고 테스트를 통과시켜 줘","assistant":null}}
+    """
+    guard let data = sample.data(using: .utf8), let request = try? JSONDecoder().decode(PendingRequest.self, from: data) else { return }
+    let dismiss: (PendingRequest) -> Void = { [weak self] _ in
+      self?.panels["demo"]?.orderOut(nil)
+      self?.panels.removeValue(forKey: "demo")
+    }
+    let demoActions = Actions(allow: dismiss, allowRemember: dismiss, deny: dismiss, answer: { r, _ in dismiss(r) }, passthrough: dismiss)
+    panels["demo"]?.orderOut(nil)
+    panels["demo"] = makePanel(for: request, actions: demoActions)
+    layout(order: ["demo"] + panels.keys.filter { $0 != "demo" })
+  }
+
+  private func makePanel(for request: PendingRequest, actions override: Actions? = nil) -> NSPanel {
+    let actions = override ?? self.actions
     let panel = KeyablePanel(contentRect: NSRect(x: 0, y: 0, width: width, height: 10),
                              styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
     // 뜰 때는 포커스를 빼앗지 않고, 입력칸을 클릭했을 때만 키 윈도우가 된다.
@@ -54,7 +75,7 @@ final class CardPanelController {
     let view = RequestCardView(request: request, actions: actions, close: { [weak self] in
       guard let self else { return }
       // 질문 카드를 닫는 것은 "여기서 안 답하겠다" — 그 세션의 원래 다이얼로그로 넘긴다. 권한 카드는 숨기기만(메뉴에 남는다).
-      if request.isQuestion { self.actions.passthrough(request) } else { self.hidden.insert(request.id) }
+      if request.isQuestion { actions.passthrough(request) } else if request.id != "demo" { self.hidden.insert(request.id) }
       self.panels[request.id]?.orderOut(nil)
       self.panels.removeValue(forKey: request.id)
     })

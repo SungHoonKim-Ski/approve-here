@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private let client = InboxClient()
   private var item: NSStatusItem!
   private var cards: CardPanelController!
+  private var onboarding: OnboardingPanel!
   private var node: String?
   private var pending: [PendingRequest] = []
   private var known: Set<String> = []
@@ -41,6 +42,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       answer: { [weak self] r, answers in self?.answer(r.id, answers) },
       passthrough: { [weak self] r in self?.passthrough(r.id) }
     ))
+    onboarding = OnboardingPanel(actions: .init(
+      connect: { [weak self] provider in self?.connect(provider) },
+      toggleLogin: { [weak self] in self?.toggleLoginItem() },
+      demoCard: { [weak self] in self?.cards.showDemo() }
+    ))
     if Bundle.main.bundleIdentifier != nil { setupNotifications() }
     Runtime.log("launch bundle=\(Bundle.main.bundlePath) core=\(Runtime.coreBundled)")
     render()
@@ -60,7 +66,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       let found = Runtime.findNode()
       Runtime.log("node=\(found ?? "없음") \(found.map(Runtime.nodeVersion) ?? "")")
       DispatchQueue.main.async { self.node = found; self.render() }
-      guard let found else { return }
+      guard let found else {
+        DispatchQueue.main.async { self.onboarding.show(node: nil) }
+        return
+      }
       if self.yieldsToInstalled {
         Runtime.log("running outside /Applications while installed copy exists — leaving hooks alone")
         DispatchQueue.main.async { self.notice = "Applications에 설치된 앱이 있어 이 사본은 훅을 건드리지 않습니다" }
@@ -73,7 +82,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
       }
       Runtime.ensureDaemon(node: found)
-      DispatchQueue.main.async { self.poll() }
+      DispatchQueue.main.async {
+        self.poll()
+        // 처음 켰거나 아무 CLI도 연결하지 않았으면 시작 안내를 띄운다.
+        if !OnboardingPanel.seen || Provider.allCases.allSatisfy({ !HookConnections.isConnected($0) }) {
+          self.onboarding.show(node: found)
+        }
+      }
     }
   }
 
@@ -148,6 +163,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(.separator())
 
     if let notice { menu.addItem(disabled(notice)) }
+    menu.addItem(action("시작 안내", #selector(showOnboarding)))
+    menu.addItem(action("카드 시험해 보기", #selector(showDemoCard)))
+    menu.addItem(action("도움말 (README)", #selector(openHelp)))
+    menu.addItem(.separator())
     let login = action("로그인 시 시작", #selector(toggleLoginItem))
     login.state = SMAppService.mainApp.status == .enabled ? .on : .off
     menu.addItem(login)
@@ -213,26 +232,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   // MARK: 연결
 
   @objc private func toggleConnection(_ sender: NSMenuItem) {
-    guard let raw = sender.representedObject as? String, let provider = Provider(rawValue: raw), let node else { return }
+    guard let raw = sender.representedObject as? String, let provider = Provider(rawValue: raw) else { return }
+    if HookConnections.isConnected(provider) { disconnect(provider) } else { connect(provider) }
+  }
+
+  private func connect(_ provider: Provider) {
+    guard let node else { return }
     if yieldsToInstalled {
       notice = "Applications의 Approve Here에서 연결을 켜고 끄세요"
       render()
       return
     }
     do {
-      if HookConnections.isConnected(provider) {
-        try HookConnections.disconnect(provider)
-        notice = "\(provider.title) 연결을 끊었습니다"
-      } else {
-        try HookConnections.connect(provider, node: node)
-        notice = provider == .codex ? "Codex 연결됨 — 다음 codex 실행에서 'Hooks need review'가 뜨면 신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
-        ensureDaemonIfNeeded()
-      }
+      try HookConnections.connect(provider, node: node)
+      notice = provider == .codex ? "Codex 연결됨 — 다음 codex 실행에서 'Hooks need review'가 뜨면 신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
+      ensureDaemonIfNeeded()
     } catch {
       notice = "설정 파일을 쓰지 못했습니다: \(error.localizedDescription)"
       Runtime.log("connection error \(error)")
     }
     render()
+    Task { @MainActor in self.onboarding.refresh(node: self.node) }
+  }
+
+  private func disconnect(_ provider: Provider) {
+    if yieldsToInstalled {
+      notice = "Applications의 Approve Here에서 연결을 켜고 끄세요"
+      render()
+      return
+    }
+    do {
+      try HookConnections.disconnect(provider)
+      notice = "\(provider.title) 연결을 끊었습니다"
+    } catch {
+      notice = "설정 파일을 쓰지 못했습니다: \(error.localizedDescription)"
+    }
+    render()
+    Task { @MainActor in self.onboarding.refresh(node: self.node) }
   }
 
   @objc private func retryNode() { bootstrap() }
@@ -246,7 +282,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       notice = "로그인 시 시작 설정 실패: \(error.localizedDescription)"
     }
     render()
+    Task { @MainActor in self.onboarding.refresh(node: self.node) }
   }
+
+  @objc private func showOnboarding() { Task { @MainActor in self.onboarding.show(node: self.node) } }
+  @objc private func showDemoCard() { Task { @MainActor in self.cards.showDemo() } }
+  @objc private func openHelp() { NSWorkspace.shared.open(URL(string: "https://github.com/SungHoonKim-Ski/approve-here#readme")!) }
 
   // MARK: 결정
 
