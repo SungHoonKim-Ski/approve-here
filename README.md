@@ -34,7 +34,7 @@ Claude Code / Codex ── PermissionRequest ──▶ hook/permission-hook.mjs
 macOS · Node 20+ · Claude Code 또는 Codex CLI.
 
 ```bash
-git clone https://github.com/<you>/approve-here && cd approve-here
+git clone https://github.com/SungHoonKim-Ski/approve-here && cd approve-here
 npm link                       # 또는 node bin/approve-here.mjs …
 approve-here install --claude --codex
 approve-here start              # 데몬 (터미널 하나에 두거나 tmux 창 하나)
