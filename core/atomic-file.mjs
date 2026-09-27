@@ -25,7 +25,7 @@ export function replaceFile(path, content) {
   try { previous = statSync(target); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (previous) {
-    if (!previous.isFile()) throw Object.assign(new Error('규칙 저장 대상이 일반 파일이 아닙니다.'), { code: 'EINVAL' });
+    if (!previous.isFile()) throw Object.assign(new Error('저장 대상이 일반 파일이 아닙니다.'), { code: 'EINVAL' });
     accessSync(target, constants.W_OK);
   }
   const temporary = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
@@ -48,7 +48,7 @@ export function replaceFile(path, content) {
     if (descriptor !== undefined) { try { closeSync(descriptor); } catch {} }
     if (created) {
       try { unlinkSync(temporary); }
-      catch (error) { console.error('[approve-here] 임시 규칙 파일을 정리하지 못했습니다:', error); }
+      catch (error) { console.error('[approve-here] 임시 파일을 정리하지 못했습니다:', error); }
     }
   }
 }

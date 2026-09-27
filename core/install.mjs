@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { replaceFile } from './atomic-file.mjs';
 
 export const HOOK_PATH = fileURLToPath(new URL('../hook/permission-hook.mjs', import.meta.url));
 const MARKER = 'permission-hook.mjs';
@@ -57,7 +58,7 @@ export function installInto(path, provider, hookPath = HOOK_PATH) {
   const changed = !isDeepStrictEqual(current.hooks, hooks);
   if (changed) {
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
+    replaceFile(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
   }
   return { path, provider, changed };
 }
@@ -76,7 +77,7 @@ export function uninstallFrom(path) {
     if (kept.length) hooks[event] = kept;
     else delete hooks[event];
   }
-  if (changed) writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
+  if (changed) replaceFile(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
   return { path, changed };
 }
 
