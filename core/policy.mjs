@@ -33,6 +33,7 @@ function withMessage(behavior, message) {
 
 /** 내장 allowlist 정책. 규칙에 맞는 Bash 명령 접두만 allow하고 나머지는 판단하지 않는다. */
 export function allowlistDecision(request, rules) {
+  if (request.toolName !== 'Bash') return null;
   for (const rule of rules || []) {
     if (rule.provider && rule.provider !== request.provider) continue;
     if (rule.tool !== request.toolName) continue;
