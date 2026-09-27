@@ -101,7 +101,13 @@ enum AnyCodable: Decodable, Equatable {
   }
 }
 
-struct CodexConnectionStatus: Decodable { let connected: Bool; let error: String?; let relayCount: Int? }
+struct CodexConnectionStatus: Decodable {
+  let connected: Bool
+  let error: String?
+  let relayCount: Int?
+  let sharedConnected: Bool?
+  let sharedError: String?
+}
 struct InboxHealth: Decodable { let codexAppServer: CodexConnectionStatus? }
 
 struct DaemonInfo: Decodable { let port: Int }
@@ -147,7 +153,8 @@ final class InboxClient {
     }
     let (data, response) = try await URLSession.shared.data(for: req)
     guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-      throw InboxError.http((response as? HTTPURLResponse)?.statusCode ?? -1)
+      let detail = (try? JSONSerialization.jsonObject(with: data) as? [String: Any])?["error"] as? String
+      throw InboxError.http((response as? HTTPURLResponse)?.statusCode ?? -1, detail)
     }
     return data
   }
@@ -181,7 +188,20 @@ final class InboxClient {
   }
 }
 
-enum InboxError: Error {
+enum InboxError: LocalizedError {
   case daemonUnavailable
-  case http(Int)
+  case http(Int, String?)
+
+  var errorDescription: String? {
+    switch self {
+    case .daemonUnavailable:
+      return "대기함에 연결할 수 없습니다. Approve Here를 다시 열거나 원래 화면에서 답해 주세요."
+    case .http(401, _):
+      return "연결 정보를 확인하지 못했습니다. Approve Here를 다시 열어 주세요."
+    case .http(409, _):
+      return "이 요청은 이미 처리됐거나 원래 화면으로 넘어갔습니다. 원래 화면에서 확인해 주세요."
+    case .http(_, let detail):
+      return detail ?? "답변을 전달하지 못했습니다. 원래 화면에서 요청 상태를 확인해 주세요."
+    }
+  }
 }

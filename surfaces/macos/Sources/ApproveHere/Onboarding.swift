@@ -9,11 +9,22 @@ final class OnboardingPanel {
     var connect: (Provider) -> Void
     var toggleLogin: () -> Void
     var demoCard: () -> Void
+    var retryNode: () -> Void
+    var installCodexLauncher: () -> Void
+    var revealCodexLauncher: () -> Void
   }
 
   private var panel: NSPanel?
   private let actions: Actions
   private let width: CGFloat = 400
+  private var message: String?
+  private var installingLauncher = false
+
+  func update(message: String?, installingLauncher: Bool = false, node: String?) {
+    self.message = message
+    self.installingLauncher = installingLauncher
+    refresh(node: node)
+  }
 
   init(actions: Actions) { self.actions = actions }
 
@@ -37,7 +48,7 @@ final class OnboardingPanel {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
-    let view = OnboardingView(node: node, actions: actions, close: { [weak self] in
+    let view = OnboardingView(node: node, message: message, installingLauncher: installingLauncher, actions: actions, close: { [weak self] in
       OnboardingPanel.seen = true
       self?.close()
     })
@@ -71,6 +82,8 @@ final class OnboardingPanel {
 
 struct OnboardingView: View {
   let node: String?
+  let message: String?
+  let installingLauncher: Bool
   let actions: OnboardingPanel.Actions
   let close: () -> Void
 
@@ -88,8 +101,11 @@ struct OnboardingView: View {
       if node == nil {
         VStack(alignment: .leading, spacing: 6) {
           Label("Node.js를 찾을 수 없습니다", systemImage: "exclamationmark.triangle").fontWeight(.medium)
-          Text("Claude Code·Codex가 쓰는 Node.js가 필요합니다. 설치 뒤 메뉴바 아이콘 → \"다시 찾기\"를 누르세요.").font(.caption).foregroundStyle(.secondary)
-          Button("Node.js 내려받기") { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }.controlSize(.small)
+          Text("카드를 전달하는 데 Node.js가 필요합니다. 설치 뒤 아래 ‘설치 후 다시 찾기’를 누르세요.").font(.caption).foregroundStyle(.secondary)
+          HStack {
+            Button("Node.js 내려받기") { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }
+            Button("설치 후 다시 찾기", action: actions.retryNode)
+          }.controlSize(.small)
         }
       } else {
         step(1, "쓰는 에이전트를 연결합니다") {
@@ -102,7 +118,14 @@ struct OnboardingView: View {
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
-            Text("Codex에서 훅을 검토·신뢰해 주세요. 앱 질문은 메뉴에서 중계 실행기를 설치하고 Codex를 종료한 뒤 그 실행기로 열면 연결됩니다.").font(.caption).foregroundStyle(.secondary)
+            Text("Codex를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱의 질문을 받으려면 아래 실행기도 설치해야 합니다.").font(.caption).foregroundStyle(.secondary)
+            Button(installingLauncher ? "Codex 실행기 설치 중…" : "Codex 앱 실행기 설치", action: actions.installCodexLauncher)
+              .disabled(installingLauncher).controlSize(.small)
+            if FileManager.default.fileExists(atPath: Runtime.codexLauncher.path) {
+              Button("설치된 실행기 보기", action: actions.revealCodexLauncher).controlSize(.small)
+              Text("Codex 앱을 완전히 종료한 뒤, 열린 폴더의 ‘Codex with Approve Here’를 실행하세요. 앞으로도 이 실행기로 Codex를 열어 주세요.")
+                .font(.caption).foregroundStyle(.secondary)
+            }
           }
         }
         step(2, "로그인할 때 자동으로 켜지게") {
@@ -110,10 +133,14 @@ struct OnboardingView: View {
           Button(on ? "로그인 시 시작 켜짐 ✓" : "로그인 시 시작 켜기") { actions.toggleLogin() }.tint(on ? .green : nil).controlSize(.small)
         }
         step(3, "어떻게 뜨는지 미리 봅니다") {
-          Button("카드 시험해 보기") { actions.demoCard() }.controlSize(.small)
+          Button("예시 카드 보기") { actions.demoCard() }.controlSize(.small)
+          Text("예시 카드는 화면 확인용입니다. 실제 연결은 에이전트에서 승인이나 질문이 발생했을 때 확인할 수 있습니다.").font(.caption).foregroundStyle(.secondary)
         }
       }
 
+      if let message {
+        Text(message).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+      }
       Divider()
       Text("승인은 CLI가 원래 물어볼 상황에서만 옵니다. Claude Code가 auto 모드이거나 허용 목록에 있는 명령은 원래대로 조용히 지나갑니다. 이 안내는 메뉴바 아이콘 → \"시작 안내\"로 다시 볼 수 있습니다. 노트북처럼 메뉴바가 좁아 아이콘이 숨겨지면 \(GlobalHotkey.label)로 메뉴를 부릅니다.")
         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)

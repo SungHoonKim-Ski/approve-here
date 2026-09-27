@@ -55,8 +55,9 @@ struct HookConnections {
     }
   }
 
-  static func connect(_ provider: Provider, node: String) throws {
-    var root = read(provider.settingsURL) ?? [:]
+  static func connect(_ provider: Provider, node: String, settingsURL: URL? = nil) throws {
+    let url = settingsURL ?? provider.settingsURL
+    var root = try readForEdit(url)
     var hooks = root["hooks"] as? [String: Any] ?? [:]
     for (event, matcher) in provider.events {
       var ours: [String: Any] = ["hooks": [["type": "command", "command": command(for: provider, node: node), "timeout": 600]]]
@@ -64,20 +65,22 @@ struct HookConnections {
       hooks[event] = withoutOurs(groups(root, event)) + [ours]
     }
     root["hooks"] = hooks
-    try write(root, to: provider.settingsURL)
-    Runtime.log("connect \(provider.rawValue) → \(provider.settingsURL.path)")
+    try write(root, to: url)
+    Runtime.log("connect \(provider.rawValue) → \(url.path)")
   }
 
-  static func disconnect(_ provider: Provider) throws {
-    guard var root = read(provider.settingsURL) else { return }
+  static func disconnect(_ provider: Provider, settingsURL: URL? = nil) throws {
+    let url = settingsURL ?? provider.settingsURL
+    guard FileManager.default.fileExists(atPath: url.path) else { return }
+    var root = try readForEdit(url)
     var hooks = root["hooks"] as? [String: Any] ?? [:]
     for (event, _) in provider.events {
       let kept = withoutOurs(groups(root, event))
       if kept.isEmpty { hooks.removeValue(forKey: event) } else { hooks[event] = kept }
     }
     root["hooks"] = hooks
-    try write(root, to: provider.settingsURL)
-    Runtime.log("disconnect \(provider.rawValue)")
+    try write(root, to: url)
+    Runtime.log("disconnect \(provider.rawValue) → \(url.path)")
   }
 
   // MARK: - 내부
@@ -101,9 +104,39 @@ struct HookConnections {
     return (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
   }
 
+  /// 읽지 못하는 설정을 빈 설정으로 취급하면 기존 CLI 설정을 덮어쓰게 된다.
+  private static func readForEdit(_ url: URL) throws -> [String: Any] {
+    guard FileManager.default.fileExists(atPath: url.path) else { return [:] }
+    let data = try Data(contentsOf: url)
+    guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+      throw ConnectionError.invalidSettings(url)
+    }
+    if let rawHooks = root["hooks"] {
+      guard let hooks = rawHooks as? [String: Any] else { throw ConnectionError.invalidSettings(url) }
+      for rawGroups in hooks.values {
+        guard let groups = rawGroups as? [[String: Any]] else { throw ConnectionError.invalidSettings(url) }
+        for group in groups {
+          guard group["hooks"] is [[String: Any]] else { throw ConnectionError.invalidSettings(url) }
+        }
+      }
+    }
+    return root
+  }
+
   private static func write(_ root: [String: Any], to url: URL) throws {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
     let data = try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
     try (String(data: data, encoding: .utf8)! + "\n").write(to: url, atomically: true, encoding: .utf8)
+  }
+}
+
+enum ConnectionError: LocalizedError {
+  case invalidSettings(URL)
+
+  var errorDescription: String? {
+    switch self {
+    case .invalidSettings(let url):
+      return "\(url.lastPathComponent)의 내용을 읽을 수 없어 기존 설정을 보존했습니다. 설정 파일을 확인한 뒤 다시 연결해 주세요."
+    }
   }
 }

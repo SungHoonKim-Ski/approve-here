@@ -14,6 +14,7 @@ final class CardPanelController {
   }
 
   private var panels: [String: NSPanel] = [:]
+  private var feedbacks: [String: CardFeedback] = [:]
   private var hidden: Set<String> = []
   private let actions: Actions
   private let width: CGFloat = 400
@@ -26,6 +27,7 @@ final class CardPanelController {
 
   func sync(_ pending: [PendingRequest]) {
     let ids = Set(pending.map(\.id) + ["demo"])
+    feedbacks = feedbacks.filter { ids.contains($0.key) }
     for (id, panel) in panels where !ids.contains(id) {
       panel.orderOut(nil)
       panels.removeValue(forKey: id)
@@ -99,6 +101,21 @@ final class CardPanelController {
     hidden.remove(id)
   }
 
+  /// 메뉴와 카드에서 연달아 누르더라도 같은 답변을 두 번 보내지 않는다.
+  func beginSubmission(_ id: String) -> Bool {
+    let feedback = feedbacks[id] ?? CardFeedback()
+    guard !feedback.isSending else { return false }
+    feedbacks[id] = feedback
+    feedback.message = nil
+    feedback.isSending = true
+    return true
+  }
+
+  func finishSubmission(_ id: String, error: String? = nil) {
+    feedbacks[id]?.isSending = false
+    feedbacks[id]?.message = error
+  }
+
   /// 시작 안내의 "카드 시험해 보기". 데몬을 거치지 않는 가짜 카드 — 버튼을 누르면 사라지기만 한다.
   func showDemo() {
     let sample = """
@@ -134,7 +151,9 @@ final class CardPanelController {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.hidesOnDeactivate = false
     let queued = request.sessionId.flatMap { queuedBySession[$0] } ?? 0
-    let view = RequestCardView(request: request, queuedInSession: queued, actions: actions, close: { [weak self] in
+    let feedback = feedbacks[request.id] ?? CardFeedback()
+    feedbacks[request.id] = feedback
+    let view = RequestCardView(request: request, queuedInSession: queued, feedback: feedback, actions: actions, close: { [weak self] in
       guard let self else { return }
       // 질문 카드를 닫는 것은 "여기서 안 답하겠다" — 그 세션의 원래 다이얼로그로 넘긴다. 권한 카드는 숨기기만(메뉴에 남는다).
       if request.isQuestion { actions.passthrough(request) } else if request.id != "demo" { self.hidden.insert(request.id) }
@@ -188,9 +207,15 @@ final class KeyablePanel: NSPanel {
   override var canBecomeMain: Bool { false }
 }
 
+final class CardFeedback: ObservableObject {
+  @Published var isSending = false
+  @Published var message: String?
+}
+
 struct RequestCardView: View {
   let request: PendingRequest
   var queuedInSession: Int = 0
+  @ObservedObject var feedback: CardFeedback
   let actions: CardPanelController.Actions
   let close: () -> Void
   @State private var draft: [String: String] = [:]
@@ -210,8 +235,19 @@ struct RequestCardView: View {
         Text(working).font(.caption).foregroundStyle(.secondary).lineLimit(2)
       }
       if request.isQuestion { questionBody } else { permissionBody }
+      if feedback.isSending {
+        HStack(spacing: 6) {
+          ProgressView().controlSize(.small)
+          Text("답변을 보내는 중…").font(.caption)
+        }
+      } else if let message = feedback.message {
+        Label(message, systemImage: "exclamationmark.circle")
+          .font(.caption).foregroundStyle(.red)
+          .fixedSize(horizontal: false, vertical: true)
+      }
       handoffLine
     }
+    .disabled(feedback.isSending)
     .padding(12)
     .frame(width: 400, alignment: .leading)
     .fixedSize(horizontal: false, vertical: true)

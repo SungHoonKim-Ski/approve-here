@@ -34,11 +34,11 @@ Applications에서 Approve Here를 엽니다. Apple 서명과 공증이 없는 �
 
 1. 쓰는 에이전트를 연결합니다. Claude Code, Codex 중 쓰는 것을 누르면 앱이 각 CLI의 설정 파일(`~/.claude/settings.json`, `~/.codex/hooks.json`)에 훅 한 줄을 넣습니다. 다른 설정은 건드리지 않습니다.
 2. 로그인 시 시작을 켜 두면 Mac을 켤 때 같이 뜹니다.
-3. 카드 시험해 보기를 누르면 승인 카드가 어떻게 뜨는지 가짜 카드로 미리 볼 수 있습니다.
+3. **예시 카드 보기**를 누르면 승인 카드가 어떻게 뜨는지 미리 볼 수 있습니다. 화면 확인용이며 실제 연결 테스트는 아닙니다.
 
 Codex는 새 훅을 처음 만나면 신뢰 확인을 요구합니다. 연결을 켠 뒤 처음 `codex`를 실행하면 "Hooks need review"가 뜨는데, Trust all and continue를 고르면 됩니다.
 
-Codex 앱(ChatGPT 앱 안의 Codex)의 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 메뉴의 "Codex 앱 중계 실행기 설치…"를 누르고, Codex를 완전히 종료한 뒤 `~/Applications`에 생긴 Codex with Approve Here로 앱을 엽니다. 왜 이 단계가 필요한지와 안 될 때 볼 것은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있습니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다.
+Codex 앱(ChatGPT 앱 안의 Codex)의 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 시작 안내의 **Codex 앱 실행기 설치**를 누르고, Codex를 완전히 종료한 뒤 **설치된 실행기 보기**를 눌러 Codex with Approve Here로 앱을 엽니다. 설치 중이거나 실패하면 안내 창 안에 상태와 이유가 표시됩니다. 메뉴의 "Codex 앱 중계 실행기 설치…"로도 설치할 수 있습니다. 왜 이 단계가 필요한지와 안 될 때 볼 것은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있습니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다.
 
 이 안내는 메뉴바 아이콘 → 시작 안내로 언제든 다시 볼 수 있습니다.
 
@@ -102,8 +102,8 @@ Claude는 카드에서 고른 답을 그대로 받습니다. 터미널에는 "Us
 ```
 Claude Code   연결됨 ✓        ← 눌러서 켜고 끔
 Codex         연결됨 ✓
-   Codex 앱·CLI 준비됨        ← 공유 App Server에 붙었는지
-   앱 중계 1개 연결됨          ← 중계 실행기로 연 Codex 앱 수
+   Codex CLI 질문 연결됨      ← CLI 공유 서버에 붙었는지
+   Codex 앱 연결됨 (1개)       ← 중계 실행기로 연 Codex 앱 수
 Codex 앱 중계 실행기 설치…
 ──────────────
 (대기 중인 요청 목록)         ← 카드를 닫았어도 여기서 답할 수 있음
