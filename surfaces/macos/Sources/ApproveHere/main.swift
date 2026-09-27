@@ -380,10 +380,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: true, node: self.node) }
     work.async { [weak self] in
       let (code, output) = Runtime.run(node, [Runtime.cliScript.path, "install-codex-launcher", "--prebuilt"], env: ["APPROVE_HERE_HOME": Runtime.home.path], timeout: 120)
+      Runtime.log("install-codex-launcher exit=\(code) \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
       DispatchQueue.main.async {
         guard let self else { return }
         self.installingLauncher = false
-        self.notice = code == 0 ? "실행기 설치 완료. Codex를 완전히 종료한 뒤 ‘설치된 실행기 보기’를 눌러 실행하세요." : "실행기를 설치하지 못했습니다: \(output.trimmingCharacters(in: .whitespacesAndNewlines))"
+        let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.notice = code == 0 ? "실행기 설치 완료. Codex를 완전히 종료한 뒤 ‘설치된 실행기 보기’를 눌러 실행하세요." : "실행기를 설치하지 못했습니다: \(detail.prefix(300))" + (detail.count > 300 ? "\n전체 오류는 기록 폴더의 app.log에서 확인할 수 있습니다." : "")
         self.render()
         self.onboarding.update(message: self.notice, node: self.node)
       }
