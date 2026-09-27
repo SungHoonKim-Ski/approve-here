@@ -32,6 +32,9 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
   const resources = join(app, 'Contents/Resources');
   const realCli = ['codex-cli/CodexCLI.app/Contents/MacOS/codex', 'codex', 'bin/codex'].map(path => join(resources, path)).find(existsSync);
   if (!realCli || !existsSync(appBinary)) throw new Error('앱에 포함된 Codex 실행 파일을 찾지 못했습니다.');
+  // A launcher created from a mounted DMG must not retain a /Volumes path.
+  const installedRelay = '/Applications/ApproveHere.app/Contents/Resources/core/bin/codex-relay.mjs';
+  const stableRelay = existsSync(installedRelay) ? installedRelay : relayPath;
   const destination = target || join(homedir(), 'Applications/Codex with Approve Here.app');
   if (!destination.endsWith('.app') || resolve(destination) === resolve(app)) throw new Error('별도의 .app 경로가 필요합니다.');
   if (existsSync(destination)) {
@@ -43,7 +46,7 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
   const directory = join(destination, 'Contents/MacOS');
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, 'launcher'), launcherScript({ appBinary, realCli, nodePath, relayPath }));
-  writeFileSync(join(directory, 'codex-shim'), `#!/bin/sh\nexec ${quote(nodePath)} ${quote(relayPath)} "$@"\n`);
+  writeFileSync(join(directory, 'codex-shim'), `#!/bin/sh\nexec ${quote(nodePath)} ${quote(stableRelay)} "$@"\n`);
   for (const file of ['launcher', 'codex-shim']) chmodSync(join(directory, file), 0o755);
   writeFileSync(join(destination, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
