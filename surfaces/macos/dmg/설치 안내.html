@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve Here 설치 안내</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.6 -apple-system, "Apple SD Gothic Neo", sans-serif; max-width: 680px; margin: 40px auto; padding: 0 20px; color: #1d1d1f; background: #fff; }
+  @media (prefers-color-scheme: dark) { body { color: #f2f2f2; background: #1c1c1e; } .box { background: #2c2c2e; } }
+  h1 { font-size: 26px; margin: 0 0 6px; }
+  .lead { color: #6e6e73; margin: 0 0 28px; }
+  h2 { font-size: 18px; margin: 32px 0 8px; }
+  ol { padding-left: 22px; } li { margin: 6px 0; }
+  .box { background: #f5f5f7; border-radius: 12px; padding: 16px 18px; margin: 14px 0; }
+  .btn { display: inline-block; background: #2b5fe6; color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 10px; font-weight: 600; }
+  .btn:hover { background: #244fc4; }
+  img { max-width: 100%; border-radius: 10px; margin: 10px 0 4px; display: block; }
+  .cap { font-size: 13px; color: #6e6e73; margin: 0 0 12px; }
+  kbd { font: inherit; background: #e8e8ed; border-radius: 5px; padding: 0 6px; }
+  small { color: #6e6e73; }
+</style>
+</head>
+<body>
+<h1>Approve Here 설치 안내</h1>
+<p class="lead">끌어 넣고 여는 것이 전부입니다. 처음 열 때 macOS가 한 번 막는데, 그 단계를 여기서 안내합니다.</p>
+
+<h2>1. 끌어 넣기</h2>
+<p>dmg 창에서 <b>ApproveHere</b>를 <b>Applications</b> 폴더로 끌어 넣습니다.</p>
+
+<h2>2. 처음 열기</h2>
+<p>Applications에서 Approve Here를 엽니다. 아래 창이 뜨면 정상입니다. Apple 서명과 공증이 없는 앱이라 macOS가 한 번 막는 것입니다.</p>
+<img src=".background/gatekeeper-dialog.png" width="260" alt="'ApproveHere'을(를) 열지 않음 — 휴지통으로 이동 / 완료">
+<p class="cap"><b>완료</b>를 누릅니다. "휴지통으로 이동"은 누르지 않습니다.</p>
+
+<h2>3. 그래도 열기</h2>
+<p>아래 버튼을 누르면 시스템 설정의 <b>개인정보 보호 및 보안</b>이 열립니다. 브라우저가 "시스템 설정을 열까요?"라고 물으면 허용합니다. 직접 가려면 시스템 설정 → 개인정보 보호 및 보안 → 맨 아래 <b>보안</b> 항목입니다.</p>
+<p><a class="btn" href="x-apple.systempreferences:com.apple.preference.security?General">시스템 설정 › 개인정보 보호 및 보안 열기</a></p>
+<img src=".background/gatekeeper-settings.png" alt="보안 — Mac을 보호하기 위해 'ApproveHere'을(를) 차단했습니다. 그래도 열기">
+<p class="cap">"Mac을 보호하기 위해 'ApproveHere'을(를) 차단했습니다" 옆의 <b>그래도 열기</b>를 누르고, 다시 묻는 창에서 <b>열기</b>를 누른 뒤 암호나 Touch ID로 확인합니다.</p>
+<div class="box">
+  이 버튼은 <b>2단계에서 한 번 막힌 뒤에만</b> 나타납니다. 보이지 않으면 Applications에서 앱을 한 번 더 열어 보고 돌아오세요.<br>
+  macOS 15부터는 앱을 우클릭 → 열기로 우회하는 방법이 없어졌습니다. 위 순서가 유일한 길입니다.
+</div>
+
+<h2>4. 끝</h2>
+<p>메뉴바 오른쪽 위에 받은편지함 아이콘이 생기고 시작 안내가 뜹니다. 거기서 Claude Code·Codex 연결을 켜면 됩니다. 이 절차는 한 번이고, 새 버전을 내려받았을 때만 다시 거칩니다.</p>
+
+<p><small>더 자세한 사용법: <a href="https://github.com/SungHoonKim-Ski/approve-here/blob/main/docs/GUIDE.md">github.com/SungHoonKim-Ski/approve-here · docs/GUIDE.md</a></small></p>
+</body>
+</html>

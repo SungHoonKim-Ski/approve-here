@@ -4,13 +4,23 @@ Mac에서 Claude Code나 Codex를 쓰는데, 터미널 창을 찾아다니며 "�
 
 ## 1. 내려받아 설치
 
-[Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 ApproveHere.dmg를 내려받아 엽니다. 앱을 오른쪽 Applications 폴더로 끌어 넣습니다.
+[Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 ApproveHere.dmg를 내려받아 엽니다. 창 안에 순서가 그려져 있습니다. 앱을 Applications 폴더로 끌어 넣습니다.
 
 ![DMG](guide/dmg.png)
 
 ## 2. 처음 열기
 
-Applications에서 Approve Here를 엽니다. Apple 서명이 없는 앱이라 처음 한 번은 macOS가 막을 수 있습니다. "확인되지 않은 개발자" 안내가 뜨면 시스템 설정 → 개인정보 보호 및 보안 맨 아래의 "그래도 열기"를 누릅니다. Finder에서 앱을 우클릭 → 열기로도 됩니다.
+Applications에서 Approve Here를 엽니다. Apple 서명과 공증이 없는 앱이라 macOS가 처음 한 번 막습니다. 아래 창이 뜨면 정상입니다.
+
+![열지 않음 안내](guide/gatekeeper-dialog.png)
+
+완료를 누릅니다. "휴지통으로 이동"은 누르지 않습니다. 그다음 시스템 설정 → 개인정보 보호 및 보안으로 가서 맨 아래 보안 항목까지 내립니다. dmg 창의 "설치 안내"를 열면 이 화면으로 바로 가는 버튼이 있습니다.
+
+![그래도 열기](guide/gatekeeper-settings.png)
+
+"Mac을 보호하기 위해 'ApproveHere'을(를) 차단했습니다" 옆의 그래도 열기를 누르고, 다시 묻는 창에서 열기를 누른 뒤 암호나 Touch ID로 확인합니다. 이 버튼은 한 번 막힌 뒤에만 나타납니다. 안 보이면 앱을 다시 한 번 열어 보고 돌아오세요. macOS 15부터는 우클릭 → 열기 우회가 없어졌습니다.
+
+이 절차는 한 번이고, 새 버전을 내려받았을 때만 다시 겪습니다.
 
 앱은 창이 없습니다. 메뉴바(화면 위 오른쪽 아이콘 줄)에 받은편지함 모양 아이콘이 하나 생깁니다.
 
