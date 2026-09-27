@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var item: NSStatusItem!
   private var cards: CardPanelController!
   private var onboarding: OnboardingPanel!
+  private var rulesPanel: RulesPanelController!
   private var node: String?
   private var pending: [PendingRequest] = []
   private var known: Set<String> = []
@@ -55,6 +56,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       installCodexLauncher: { [weak self] in self?.installCodexLauncher() },
       revealCodexLauncher: { NSWorkspace.shared.activateFileViewerSelecting([Runtime.codexLauncher]) }
     ))
+    rulesPanel = RulesPanelController(client: client)
     if Bundle.main.bundleIdentifier != nil { setupNotifications() }
     Runtime.log("launch bundle=\(Bundle.main.bundlePath) core=\(Runtime.coreBundled)")
     render()
@@ -191,6 +193,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
     if let notice { menu.addItem(disabled(notice)) }
     menu.addItem(action("시작 안내", #selector(showOnboarding)))
+    menu.addItem(action("자동 승인 관리…", #selector(showAutomaticRules)))
     menu.addItem(action("카드 시험해 보기", #selector(showDemoCard)))
     menu.addItem(action("도움말 (README)", #selector(openHelp)))
     menu.addItem(disabled("아이콘이 숨겨져도 \(GlobalHotkey.label)로 이 메뉴가 뜹니다"))
@@ -343,6 +346,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   }
 
   @objc private func showOnboarding() { Task { @MainActor in self.onboarding.show(node: self.node) } }
+  @objc private func showAutomaticRules() { Task { @MainActor in self.rulesPanel.show() } }
   @objc private func showDemoCard() { Task { @MainActor in self.cards.showDemo() } }
   @objc private func openHelp() { NSWorkspace.shared.open(URL(string: "https://github.com/SungHoonKim-Ski/approve-here#readme")!) }
 

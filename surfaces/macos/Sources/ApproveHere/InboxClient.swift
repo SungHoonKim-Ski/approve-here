@@ -167,6 +167,21 @@ final class InboxClient {
     try JSONDecoder().decode([PendingRequest].self, from: try await request("/requests?status=pending"))
   }
 
+  func automaticRules() async throws -> [AutomaticApprovalRule] {
+    try decodeRules(await request("/allowlist"))
+  }
+
+  private func decodeRules(_ data: Data) throws -> [AutomaticApprovalRule] {
+    guard let values = try JSONSerialization.jsonObject(with: data) as? [Any] else {
+      throw InboxError.invalidRules
+    }
+    return values.map { AutomaticApprovalRule(value: $0) }
+  }
+
+  func removeAutomaticRule(_ rule: AutomaticApprovalRule) async throws -> [AutomaticApprovalRule] {
+    try decodeRules(await request("/allowlist", method: "DELETE", body: ["rule": rule.value]))
+  }
+
   func decide(_ id: String, behavior: String, remember prefix: String? = nil) async throws {
     var body: [String: Any] = ["behavior": behavior]
     if let prefix { body["remember"] = ["commandPrefix": prefix] }
@@ -190,12 +205,15 @@ final class InboxClient {
 
 enum InboxError: LocalizedError {
   case daemonUnavailable
+  case invalidRules
   case http(Int, String?)
 
   var errorDescription: String? {
     switch self {
     case .daemonUnavailable:
       return "대기함에 연결할 수 없습니다. Approve Here를 다시 열거나 원래 화면에서 답해 주세요."
+    case .invalidRules:
+      return "자동 승인 목록을 읽을 수 없습니다. 새로고침해 현재 규칙을 확인해 주세요."
     case .http(401, _):
       return "연결 정보를 확인하지 못했습니다. Approve Here를 다시 열어 주세요."
     case .http(409, _):
