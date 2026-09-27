@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-export const HOOK_PATH = new URL('../hook/permission-hook.mjs', import.meta.url).pathname;
+export const HOOK_PATH = fileURLToPath(new URL('../hook/permission-hook.mjs', import.meta.url));
 const MARKER = 'permission-hook.mjs';
 
 export function hookCommand(provider, hookPath = HOOK_PATH) {

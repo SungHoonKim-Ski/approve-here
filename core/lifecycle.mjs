@@ -1,9 +1,10 @@
 import { spawn } from 'node:child_process';
 import { openSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ensureHome, inboxHome, loadConfig, readDaemonInfo, readToken, writeDaemonInfo } from './config.mjs';
 
-const BIN = new URL('../bin/approve-here.mjs', import.meta.url).pathname;
+const BIN = fileURLToPath(new URL('../bin/approve-here.mjs', import.meta.url));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /**
