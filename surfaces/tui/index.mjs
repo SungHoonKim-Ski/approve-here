@@ -71,8 +71,8 @@ async function decide(behavior, remember) {
   }
   const body = remember ? { behavior, remember } : { behavior };
   try {
-    await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify(body) });
-    notice = `${behavior === 'allow' ? '허용' : '거부'}: ${summary(target)}${remember ? ` (기억: ${remember.commandPrefix})` : ''}`;
+    const result = await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify(body) });
+    notice = result.rememberError ?? `${behavior === 'allow' ? '허용' : '거부'}: ${summary(target)}${remember ? ` (기억: ${remember.commandPrefix})` : ''}`;
   } catch (error) {
     notice = `실패: ${error.message}`;
   }
@@ -185,6 +185,7 @@ function render() {
   for (const r of recent.slice(0, 5)) {
     const by = r.status === 'auto' ? `자동(${r.decidedBy})` : r.status;
     lines.push(`  ${by.padEnd(22)} ${summary(r)}`.slice(0, width));
+    if (r.rememberError) lines.push('    자동 승인 규칙 저장 실패 — 이번 요청은 허용됨');
   }
   lines.push('');
   if (notice) lines.push(`» ${notice}`.slice(0, width));

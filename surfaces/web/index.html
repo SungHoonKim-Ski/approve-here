@@ -107,7 +107,7 @@
         </div>
       </article>`;
     $('pending').innerHTML = pending.length ? pending.map(r => r.kind === 'question' ? questionCard(r) : permissionCard(r)).join('') : '<p class="empty">대기 중인 요청이 없습니다.</p>';
-    $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}</code>`).join('');
+    $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}${r.rememberError ? `<span class="desc" style="display:block">${esc(r.rememberError)}</span>` : ''}</code>`).join('');
   }
 
   // ---- 실제 데몬 ----
@@ -126,6 +126,7 @@
   function subscribe() {
     const es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
     es.onmessage = refresh; es.addEventListener('registered', refresh); es.addEventListener('decided', refresh); es.addEventListener('expired', refresh); es.addEventListener('answered_externally', refresh); es.addEventListener('handed_off', refresh);
+    es.addEventListener('remember_failed', refresh);
     es.onerror = () => { $('state').textContent = '데몬 연결 끊김 — 재시도 중'; };
     refresh();
   }
@@ -174,7 +175,10 @@
         await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ answers: draft }) });
         delete drafts[id];
       }
-      else await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
+      else {
+        const result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
+        if (result.rememberError) alert(result.rememberError);
+      }
     } catch (err) { $('state').textContent = `실패: ${err.message}`; btn.disabled = false; }
   });
 
