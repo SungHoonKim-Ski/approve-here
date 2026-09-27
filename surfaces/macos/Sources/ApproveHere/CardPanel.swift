@@ -45,8 +45,13 @@ final class CardPanelController {
       panels[request.id]?.orderOut(nil)
       panels.removeValue(forKey: request.id)
     }
-    for request in visible where panels[request.id] == nil && !hidden.contains(request.id) {
+    for request in visible where !hidden.contains(request.id) {
+      let queued = request.sessionId.flatMap { queuedBySession[$0] } ?? 0
+      // 같은 세션에 뒤따르는 요청 수가 바뀌면 머리의 "이 세션에 N건 더"가 낡으므로 카드를 다시 그린다.
+      if panels[request.id] != nil && panelQueued[request.id] == queued { continue }
+      panels[request.id]?.orderOut(nil)
       panels[request.id] = makePanel(for: request)
+      panelQueued[request.id] = queued
     }
     updateSummary(total: perSession.count)
     layout(order: (panels["demo"] != nil ? ["demo"] : []) + visible.map(\.id))
@@ -54,6 +59,8 @@ final class CardPanelController {
 
   /// 세션별로 이 카드 뒤에 기다리는 요청 수. 카드 머리에 "이 세션에 N건 더"로 보인다.
   private(set) var queuedBySession: [String: Int] = [:]
+  /// 각 카드가 그려질 때의 대기 수 — 바뀌면 다시 그린다.
+  private var panelQueued: [String: Int] = [:]
 
   /// "N건 더 · 펼치기" / "접기" 한 줄. 카드가 maxVisible을 넘을 때만 보인다.
   private func updateSummary(total: Int) {
