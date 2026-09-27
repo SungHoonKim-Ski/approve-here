@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig, readAllowlist } from './config.mjs';
 import { allowlistDecision, runPolicyHooks } from './policy.mjs';
-import { sessionContext } from './transcript.mjs';
+import { sessionContext, codexApprovalsReviewer } from './transcript.mjs';
 import { connect } from 'node:net';
 
 const METHODS = new Set(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput']);
@@ -24,6 +24,12 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
   let ws, stopped = false, syncing = false, sequence = 0;
   const rpc = new Map(), threads = new Map(), reviewers = new Map(), subscribed = new Set(), items = new Map(), requests = new Map(), suppressed = new Set();
   const status = { connected: false, error: null };
+
+  function automaticReviewer(params) {
+    const thread = threads.get(params.threadId);
+    const reviewer = codexApprovalsReviewer(thread?.path, params.turnId) ?? reviewers.get(params.threadId);
+    return ['auto_review', 'guardian_subagent'].includes(reviewer);
+  }
 
   function send(message) {
     return new Promise((resolve, reject) => {
@@ -88,6 +94,9 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
     if (p.questions?.some(q => q.isSecret)) return;
     const thread = threads.get(p.threadId);
     const question = message.method === 'item/tool/requestUserInput';
+    // Permission hooks and native server approvals must follow the same routing.
+    // Leave these requests to Codex's reviewer; never synthesize an approval.
+    if (!question && automaticReviewer(p)) return;
     const network = p.networkApprovalContext;
     const toolName = question ? 'request_user_input' : network ? 'Network' : message.method.includes('fileChange') ? 'apply_patch' : message.method.includes('permissions') ? 'request_permissions' : 'Bash';
     const recordInput = {
@@ -128,7 +137,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
         decision = result?.decision; decidedBy = `policy:${result?.policy}`;
       }
       if (requests.get(message.id) !== entry) return;
-      if (!surfaceActive() || !active()) { requests.delete(message.id); return; }
+      if (!surfaceActive() || !active() || automaticReviewer(p)) { requests.delete(message.id); return; }
       if (decision) {
         entry.responding = true;
         await respond(message.id, responseFor(entry, decision));
