@@ -107,7 +107,7 @@
         </div>
       </article>`;
     $('pending').innerHTML = pending.length ? pending.map(r => r.kind === 'question' ? questionCard(r) : permissionCard(r)).join('') : '<p class="empty">대기 중인 요청이 없습니다.</p>';
-    $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}${r.rememberError ? `<span class="desc" style="display:block">${esc(r.rememberError)}</span>` : ''}</code>`).join('');
+    $('recent').innerHTML = recent.slice(0, 8).map(r => `<span class="by ${esc(r.status)}">${esc(r.status === 'auto' ? `자동·${(r.decidedBy || '').replace(/^policy:.*\//, '')}` : r.status)}</span><code>${esc(summary(r))}${[r.rememberError, r.historyError].filter(Boolean).map(message => `<span class="desc" style="display:block">${esc(message)}</span>`).join('')}</code>`).join('');
   }
 
   // ---- 실제 데몬 ----
@@ -163,8 +163,9 @@
       return;
     }
     try {
+      let result;
       if (act === 'jump') await api(`/requests/${id}/jump`, { method: 'POST' });
-      else if (act === 'passthrough') await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
+      else if (act === 'passthrough') result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
       else if (act === 'option') {
         // 질문 하나면 바로 보내고, 여럿이면 다 고른 뒤 보낸다.
         const draft = (drafts[id] = drafts[id] || {});
@@ -172,13 +173,14 @@
         draft[q.id ?? q.question] = btn.dataset.label;
         btn.classList.add('allow');
         if (Object.keys(draft).length < r.questions.length) { btn.disabled = false; return; }
-        await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ answers: draft }) });
+        result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ answers: draft }) });
         delete drafts[id];
       }
       else {
-        const result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
-        if (result.rememberError) alert(result.rememberError);
+        result = await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify(act === 'remember' ? { behavior: 'allow', remember: { commandPrefix: prefix(r) } } : { behavior: act }) });
       }
+      const warning = [result?.rememberError, result?.historyError].filter(Boolean).join('\n');
+      if (warning) alert(warning);
     } catch (err) { $('state').textContent = `실패: ${err.message}`; btn.disabled = false; }
   });
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startDaemon } from '../../../core/daemon.mjs';
@@ -14,11 +14,16 @@ try {
   writeFileSync(rulePath, original);
   daemon = await startDaemon({ home, port: 0, tmux: { drive: async () => {
     deliveries++;
-    chmodSync(rulePath, 0o444); chmodSync(home, 0o500);
+    if (deliveries < 3) {
+      chmodSync(rulePath, 0o444); chmodSync(home, 0o500);
+    } else {
+      chmodSync(home, 0o700); chmodSync(rulePath, 0o600);
+      chmodSync(join(home, 'requests.jsonl'), 0o444);
+    }
     return { ok: true };
   } } });
   const ids = [];
-  for (const sessionId of ['warning', 'plain']) {
+  for (const sessionId of ['warning', 'plain', 'history']) {
     const res = await fetch(`http://127.0.0.1:${daemon.port}/requests`, {
       method: 'POST', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' },
       body: JSON.stringify({ sessionId, provider: 'codex', mode: 'mirror', toolName: 'Bash', toolInput: { command: 'npm test' } }),
@@ -30,13 +35,16 @@ try {
   const result = await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', (code, signal) => resolve({ code, signal })); });
   assert.equal(result.signal, null);
   assert.equal(result.code, 0);
-  assert.equal(deliveries, 2);
+  assert.equal(deliveries, 3);
   assert.equal(daemon.store.get(ids[0]).status, 'allowed');
   assert.ok(daemon.store.get(ids[0]).rememberError);
   assert.equal(daemon.store.get(ids[1]).status, 'allowed');
+  assert.equal(daemon.store.get(ids[2]).status, 'denied');
+  assert.ok(daemon.store.get(ids[2]).historyError);
   assert.equal(readFileSync(rulePath, 'utf8'), original);
 } finally {
   chmodSync(home, 0o700); chmodSync(rulePath, 0o600);
+  if (existsSync(join(home, 'requests.jsonl'))) chmodSync(join(home, 'requests.jsonl'), 0o600);
   if (daemon) await daemon.close();
   rmSync(home, { recursive: true, force: true });
 }

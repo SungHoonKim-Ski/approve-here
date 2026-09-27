@@ -452,26 +452,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private func decide(_ id: String?, _ behavior: String, _ remember: String?) {
     guard let id else { return }
     submit(id) { [self] in
-      let warning = try await client.decide(id, behavior: behavior, remember: remember)
-      if let warning {
-        await MainActor.run {
-          self.notice = warning
-          Runtime.log("remember failed id=\(id): \(warning)")
-          let alert = NSAlert()
-          alert.messageText = "이번 요청은 허용했습니다"
-          alert.informativeText = warning
-          alert.addButton(withTitle: "확인")
-          alert.runModal()
-        }
-      }
-      return warning
+      try await client.decide(id, behavior: behavior, remember: remember)
     }
   }
 
   private func answer(_ id: String, _ answers: [String: String]) {
     submit(id) { [self] in
       try await client.answer(id, answers: answers)
-      return nil
     }
   }
 
@@ -479,7 +466,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     guard let id else { return }
     submit(id) { [self] in
       try await client.passthrough(id)
-      return nil
     }
   }
 
@@ -490,6 +476,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let warning = try await operation()
         cards.finishSubmission(id)
         notice = warning ?? "답변을 전달했습니다"
+        if let warning {
+          Runtime.log("storage warning id=\(id): \(warning)")
+          let alert = NSAlert()
+          alert.messageText = "답변을 전달했습니다"
+          alert.informativeText = warning
+          alert.addButton(withTitle: "확인")
+          alert.runModal()
+        }
       } catch {
         let message = (error as? InboxError)?.errorDescription
           ?? "답변이 전달됐는지 확인하지 못했습니다. 원래 화면에서 요청 상태를 확인해 주세요."
