@@ -89,7 +89,7 @@
           <p class="desc" style="color:var(--ink);margin-top:8px">${esc(q.question)}</p>
           <div class="actions">${(q.options || []).map(o => `<button data-act="option" data-q="${qi}" data-label="${esc(o.label)}" title="${esc(o.description ?? '')}">${esc(o.label)}</button>`).join('')}</div>`).join('')}
         <div class="actions">
-          <button data-act="passthrough">터미널에서 답하기</button>
+          <button data-act="passthrough">원래 화면에서 답하기</button>
           ${r.tmux?.pane ? `<button data-act="jump">그 tmux 창으로</button>` : ''}
         </div>
       </article>`;
@@ -124,7 +124,7 @@
   }
   function subscribe() {
     const es = new EventSource(`/events?token=${encodeURIComponent(token)}`);
-    es.onmessage = refresh; es.addEventListener('registered', refresh); es.addEventListener('decided', refresh); es.addEventListener('expired', refresh);
+    es.onmessage = refresh; es.addEventListener('registered', refresh); es.addEventListener('decided', refresh); es.addEventListener('expired', refresh); es.addEventListener('answered_externally', refresh); es.addEventListener('handed_off', refresh);
     es.onerror = () => { $('state').textContent = '데몬 연결 끊김 — 재시도 중'; };
     refresh();
   }
@@ -166,7 +166,8 @@
       else if (act === 'option') {
         // 질문 하나면 바로 보내고, 여럿이면 다 고른 뒤 보낸다.
         const draft = (drafts[id] = drafts[id] || {});
-        draft[r.questions[Number(btn.dataset.q)].question] = btn.dataset.label;
+        const q = r.questions[Number(btn.dataset.q)];
+        draft[q.id ?? q.question] = btn.dataset.label;
         btn.classList.add('allow');
         if (Object.keys(draft).length < r.questions.length) { btn.disabled = false; return; }
         await api(`/requests/${id}/decision`, { method: 'POST', body: JSON.stringify({ answers: draft }) });

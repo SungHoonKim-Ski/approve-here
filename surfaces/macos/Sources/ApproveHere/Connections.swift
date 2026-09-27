@@ -11,15 +11,15 @@ enum Provider: String, CaseIterable {
     let home = FileManager.default.homeDirectoryForCurrentUser
     return self == .claude
       ? home.appendingPathComponent(".claude/settings.json")
-      : home.appendingPathComponent(".codex/hooks.json")
+      : URL(fileURLWithPath: ProcessInfo.processInfo.environment["CODEX_HOME"] ?? home.appendingPathComponent(".codex").path).appendingPathComponent("hooks.json")
   }
 
-  /// 훅이 서는 이벤트. Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
+  /// Claude 질문은 PreToolUse, Codex 앱·CLI 질문은 코어의 App Server 연결로 받는다.
   /// PostToolUse는 "터미널에서 답했다"는 신호 — 양쪽에 떠 있던 카드를 지운다.
   var events: [(event: String, matcher: String?)] {
     self == .claude
       ? [("PermissionRequest", nil), ("PreToolUse", "AskUserQuestion"), ("PostToolUse", "AskUserQuestion")]
-      : [("PermissionRequest", nil), ("PostToolUse", "Bash")]
+      : [("PermissionRequest", nil), ("PostToolUse", nil)]
   }
 }
 
@@ -47,7 +47,12 @@ struct HookConnections {
   static func isStale(_ provider: Provider, node: String) -> Bool {
     guard isConnected(provider) else { return false }
     let expected = command(for: provider, node: node)
-    return provider.events.contains { registeredCommand(provider, event: $0.event) != expected }
+    guard let root = read(provider.settingsURL) else { return true }
+    return provider.events.contains { event, matcher in
+      !groups(root, event).contains { group in
+        (group["matcher"] as? String) == matcher && (group["hooks"] as? [[String: Any]] ?? []).contains { ($0["command"] as? String) == expected }
+      }
+    }
   }
 
   static func connect(_ provider: Provider, node: String) throws {
