@@ -201,7 +201,12 @@ export async function startDaemon({
     else decided = store.decide(record.id, decision, 'user');
     if (decided?.status === 'allowed' && remembering) {
       const rule = { tool: record.toolName, commandPrefix: input.remember.commandPrefix, provider: record.provider };
-      writeAllowlist(root, [...readAllowlist(root), rule]);
+      try { writeAllowlist(root, [...readAllowlist(root), rule]); }
+      catch (error) {
+        console.error('[approve-here] 자동 승인 규칙 저장 실패:', error);
+        const message = '이번 요청은 허용했지만 자동 승인 규칙은 저장하지 못했습니다. 다음 요청은 다시 확인해 주세요. 기록 폴더의 daemon.log에서 오류를 확인할 수 있습니다.';
+        return store.rememberFailed(record.id, message);
+      }
     }
     return decided;
   }

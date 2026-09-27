@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startDaemon } from '../core/daemon.mjs';
@@ -187,6 +187,36 @@ test('자동 규칙 사전 확인 뒤 승인 전달 중 추가된 규칙도 저�
     assert.equal((await response).status, 200);
     assert.deepEqual(JSON.parse(readFileSync(join(home, 'allowlist.json'), 'utf8')), [concurrent, { tool: 'Bash', commandPrefix: 'npm test', provider: 'codex' }]);
   } finally { finishDelivery(); await response; }
+});
+
+test('승인 전달 뒤 규칙 쓰기에 실패하면 실제 허용 결과와 저장 실패를 함께 돌려준다', async t => {
+  if (process.getuid?.() === 0) return t.skip('권한 거부 검증은 일반 사용자로 실행한다');
+  const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  const rulesPath = join(home, 'allowlist.json');
+  const original = '[{"tool":"Bash","commandPrefix":"git status"}]\n';
+  writeFileSync(rulesPath, original);
+  let deliveries = 0;
+  const daemon = await startDaemon({ home, port: 0, tmux: { drive: async () => {
+    deliveries++;
+    chmodSync(rulesPath, 0o444);
+    chmodSync(home, 0o500);
+    return { ok: true };
+  } } });
+  t.after(async () => { chmodSync(home, 0o700); chmodSync(rulesPath, 0o600); await daemon.close(); });
+  const api = (path, body) => fetch(`http://127.0.0.1:${daemon.port}${path}`, {
+    method: body ? 'POST' : 'GET', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const created = await (await api('/requests', { ...sample, mode: 'mirror' })).json();
+  const response = await api(`/requests/${created.id}/decision`, { behavior: 'allow', remember: { commandPrefix: 'npm test' } });
+  assert.equal(response.status, 200, '이미 전달한 승인을 실패했다고 응답하면 안 된다');
+  const result = await response.json();
+  assert.equal(result.status, 'allowed');
+  assert.match(result.rememberError, /이번 요청은 허용.*자동 승인 규칙.*저장하지 못/);
+  assert.equal(deliveries, 1);
+  assert.equal(readFileSync(rulesPath, 'utf8'), original);
+  const saved = await (await api(`/requests/${created.id}`)).json();
+  assert.equal(saved.rememberError, result.rememberError, '저장 실패는 처리 이력에도 남긴다');
 });
 
 test('자동 처리(policy) 기록은 pending에 오르지 않고 recent에 남는다', async t => {
