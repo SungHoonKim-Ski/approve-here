@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { install, installInto, uninstallFrom, hookCommand, codexHooksPath } from '../core/install.mjs';
@@ -85,4 +85,52 @@ test('사용자 지정 Codex 홈에서 설치와 제거가 같은 훅 파일을 
   assert.ok(JSON.parse(readFileSync(path, 'utf8')).hooks.PermissionRequest);
   uninstallFrom(path);
   assert.equal(JSON.parse(readFileSync(path, 'utf8')).hooks.PermissionRequest, undefined);
+});
+
+test('읽을 수 없는 설정 형식은 설치·제거 모두 원본을 보존한다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inbox-invalid-settings-'));
+  const path = join(dir, 'settings.json');
+  const values = [{ hooks: [] }, null, [], 'settings', { hooks: null }, { hooks: 'hooks' },
+    { hooks: { PermissionRequest: {} } }, { hooks: { PreToolUse: [null] } },
+    { hooks: { PermissionRequest: [{ hooks: {} }] } },
+    { hooks: { Stop: [{ hooks: [null] }] } }];
+  try {
+    for (const raw of [...values.map(value => JSON.stringify(value)), '{broken']) {
+      writeFileSync(path, raw);
+      for (const edit of [() => installInto(path, 'claude'), () => uninstallFrom(path)]) {
+        assert.throws(edit, /기존 설정을 보존/);
+        assert.equal(readFileSync(path, 'utf8'), raw);
+      }
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('다른 훅과 같은 그룹에 있는 우리 훅도 제거하고 그룹 메타데이터를 보존한다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inbox-mixed-hooks-'));
+  const path = join(dir, 'settings.json');
+  const other = { type: 'command', command: 'node guard.mjs', timeout: 10 };
+  const group = { matcher: 'Bash', custom: { retained: true }, hooks: [other, { type: 'command', command: hookCommand('claude') }] };
+  try {
+    writeFileSync(path, JSON.stringify({ permissions: { allow: ['Read'] }, hooks: { PermissionRequest: [group] } }));
+    assert.equal(uninstallFrom(path).changed, true);
+    const settings = JSON.parse(readFileSync(path, 'utf8'));
+    assert.deepEqual(settings.permissions, { allow: ['Read'] });
+    assert.deepEqual(settings.hooks.PermissionRequest, [{ ...group, hooks: [other] }]);
+    const raw = readFileSync(path, 'utf8');
+    assert.equal(uninstallFrom(path).changed, false);
+    assert.equal(readFileSync(path, 'utf8'), raw);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('이미 같은 훅이 등록돼 있으면 설치가 파일을 다시 쓰지 않는다', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'inbox-stable-hooks-'));
+  const path = join(dir, 'settings.json');
+  try {
+    assert.equal(installInto(path, 'claude').changed, true);
+    const settings = JSON.parse(readFileSync(path, 'utf8'));
+    const raw = JSON.stringify(settings); // 다른 들여쓰기도 재설치로 바뀌지 않는다.
+    writeFileSync(path, raw);
+    assert.equal(installInto(path, 'claude').changed, false);
+    assert.equal(readFileSync(path, 'utf8'), raw);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });
