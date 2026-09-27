@@ -128,7 +128,9 @@ Codex 앱 ─────── 중계 실행기(표준 입출력 통과) ──
 { "policyHooks": { "claude": ["node /path/to/my-permission-policy.mjs"], "codex": [] } }
 ```
 
-기억시킨 규칙은 `~/.approve-here/allowlist.json`, 모든 결정 이력은 `~/.approve-here/requests.jsonl`에 있습니다. 메뉴의 "기록 폴더 열기"로 갑니다.
+기억시킨 규칙은 메뉴의 **자동 승인 관리…**에서 확인하고, 규칙 옆의 **자동 승인 해제**로 지울 수 있습니다. 다음 요청부터 적용되며 Claude Code·Codex 자체의 허용 목록이나 자동 승인 모드는 별도로 적용됩니다.
+
+규칙 파일은 `~/.approve-here/allowlist.json`, 모든 결정 이력은 `~/.approve-here/requests.jsonl`에 있습니다. 메뉴의 "기록 폴더 열기"로 갑니다.
 
 ## 하지 않는 것
 
@@ -142,6 +144,8 @@ Codex 앱 ─────── 중계 실행기(표준 입출력 통과) ──
 git clone https://github.com/SungHoonKim-Ski/approve-here && cd approve-here
 npm ci                         # Node 의존성 설치
 npm test                       # Node 코어 테스트
+sh surfaces/macos/test-settings.sh # macOS 설정 보존 테스트
+sh surfaces/macos/test-rules.sh # 실제 네이티브 클라이언트와 임시 대기함의 규칙 해제 테스트
 sh surfaces/macos/build.sh     # SwiftPM만으로 .app·zip·dmg (Xcode 불필요)
 ```
 
