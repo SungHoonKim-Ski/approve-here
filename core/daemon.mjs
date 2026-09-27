@@ -102,7 +102,7 @@ export async function startDaemon({
       if (req.method === 'GET' && action === 'wait') {
         const seconds = Math.min(Number(url.searchParams.get('timeout') ?? 25), MAX_WAIT_SECONDS);
         const settled = await store.wait(id, Math.max(0, seconds) * 1000);
-        return json(res, 200, { status: settled.status, decision: settled.decision });
+        return json(res, 200, { status: settled.status, decision: settled.decision, historyError: settled.historyError });
       }
       if (req.method === 'POST' && action === 'decision') return json(res, 200, await decide(record, validateDecision(await body(req))));
       if (req.method === 'POST' && action === 'expire') return json(res, 200, store.expire(id));
