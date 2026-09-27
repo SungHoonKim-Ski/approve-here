@@ -39,6 +39,8 @@ Codex에서 새 훅을 검토·신뢰하세요. 공유 App Server에 연결된 �
 
 공유 서버 방식은 같은 사용자·같은 `CODEX_HOME`의 App Server를 사용해야 합니다. 기본 접점은 `~/.codex/app-server-control/app-server-control.sock`입니다. 앱 중계 방식은 같은 `APPROVE_HERE_HOME`의 `codex-relays` 폴더를 사용합니다. 중계 소켓과 폴더는 현재 사용자만 접근할 수 있습니다.
 
+Codex CLI 0.157.1에서 `--no-daemon`, `--profile` 또는 `-c approvals_reviewer=...` 같은 서버 설정 오버라이드를 사용하면 공유 서버 대신 CLI 내부 서버를 사용합니다. 이 세션의 승인은 기존 훅으로 처리하지만 질문은 원래 CLI에서 받습니다. 질문 카드가 필요하면 공유 서버를 사용하는 일반 실행으로 여세요. [Codex의 공유 서버 제외 조건](https://github.com/openai/codex/blob/main/codex-rs/tui/src/daemon_startup.rs)에 따라 다른 `-c` 옵션도 영향을 줄 수 있습니다.
+
 Approve Here가 활성 상태이고 Codex 연결이 켜져 있을 때만 서버에 연결합니다. 이미 메모리에 올라온 세션 목록을 읽고 `thread/resume`으로 해당 세션에 추가 연결합니다. 모델, 샌드박스, 승인 정책을 바꾸거나 새 대화를 시작하지 않습니다.
 
 `approve-here status`로 공유 서버 연결 상태와 앱 중계 연결 수를 확인합니다. **공유 서버만 연결됐다는 표시로 현재 앱 대화까지 연결된 것은 아닙니다.** 별도 stdio 앱의 질문은 중계 실행기로 앱을 열었을 때 연결됩니다. 원래 실행 방식에서는 권한 훅과 “나 대신 승인” 인계가 동작하고 질문은 원래 앱에서 받습니다.
