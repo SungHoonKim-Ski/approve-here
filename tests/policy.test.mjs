@@ -39,6 +39,11 @@ test('allowlistDecision: Bash 명령 접두 규칙이 맞으면 allow, 아니면
   assert.equal(allowlistDecision({ provider: 'claude', toolName: 'Write', toolInput: {} }, rules), null);
 });
 
+test('패치 헤더를 명령 접두로 저장한 규칙은 파일 변경을 자동 승인하지 않는다', () => {
+  const request = { provider: 'codex', toolName: 'apply_patch', toolInput: { command: '*** Begin Patch\n*** Delete File: important.txt\n*** End Patch' } };
+  assert.equal(allowlistDecision(request, [{ provider: 'codex', tool: 'apply_patch', commandPrefix: '*** Begin' }]), null);
+});
+
 test('runPolicyHooks: 사용자 훅을 순서대로 실행하고 첫 결정을 돌려준다. 결정이 없으면 null', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'inbox-policy-'));
   const passThrough = join(dir, 'pass.sh');
