@@ -41,7 +41,8 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </dict></plist>
 PLIST
 # ad-hoc 서명: 알림 권한 대화상자가 번들 신원을 요구한다. 배포 서명·공증이 아니라 처음 열 때 Gatekeeper가 한 번 막는다(README "처음 열기").
-codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 ditto -c -k --keepParent "$APP" dist/ApproveHere.app.zip
 if [ "${APPROVE_HERE_SKIP_DMG:-0}" = 1 ]; then
   echo "built app and zip: $PWD/$APP ($VERSION)"
