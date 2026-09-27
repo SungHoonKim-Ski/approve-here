@@ -23,10 +23,13 @@ try {
     return { ok: true };
   } } });
   const ids = [];
-  for (const sessionId of ['warning', 'plain', 'history']) {
+  for (const sessionId of ['warning', 'plain', 'history', 'answer', 'passthrough']) {
+    const question = ['answer', 'passthrough'].includes(sessionId);
     const res = await fetch(`http://127.0.0.1:${daemon.port}/requests`, {
       method: 'POST', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, provider: 'codex', mode: 'mirror', toolName: 'Bash', toolInput: { command: 'npm test' } }),
+      body: JSON.stringify(question
+        ? { sessionId, provider: 'claude', kind: 'question', toolName: 'AskUserQuestion', questions: [{ id: 'selection', question: '검증 질문' }] }
+        : { sessionId, provider: 'codex', mode: 'mirror', toolName: 'Bash', toolInput: { command: 'npm test' } }),
     });
     assert.equal(res.status, 201);
     ids.push((await res.json()).id);
@@ -41,6 +44,10 @@ try {
   assert.equal(daemon.store.get(ids[1]).status, 'allowed');
   assert.equal(daemon.store.get(ids[2]).status, 'denied');
   assert.ok(daemon.store.get(ids[2]).historyError);
+  assert.equal(daemon.store.get(ids[3]).status, 'answered');
+  assert.ok(daemon.store.get(ids[3]).historyError);
+  assert.equal(daemon.store.get(ids[4]).status, 'passed');
+  assert.ok(daemon.store.get(ids[4]).historyError);
   assert.equal(readFileSync(rulePath, 'utf8'), original);
 } finally {
   chmodSync(home, 0o700); chmodSync(rulePath, 0o600);
