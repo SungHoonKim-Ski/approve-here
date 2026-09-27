@@ -42,6 +42,12 @@ const commands = {
     const health = await daemonHealth(inboxHome());
     console.log(health ? `실행 중 · 포트 ${health.port} · 대기 ${health.pending}건 · 표면 ${health.surfaceActive ? '있음' : '없음'}` : '데몬이 실행 중이 아닙니다. 표면(tui·app·open)을 열면 같이 뜹니다.');
     if (health?.codexAppServer) console.log(health.codexAppServer.connected ? 'Codex 앱·CLI 서버 연결됨' : `Codex 앱·CLI 서버 연결 대기${health.codexAppServer.error ? `: ${health.codexAppServer.error}` : ''}`);
+    if (health?.codexAppServer) console.log(`Codex 앱 중계 ${health.codexAppServer.relayCount ?? 0}개 연결됨`);
+  },
+  async 'install-codex-launcher'() {
+    const { installCodexLauncher } = await import('../core/codex-launcher.mjs');
+    const target = installCodexLauncher({ appPath: flag('--app'), target: flag('--target') });
+    console.log(`중계 실행기 설치: ${target}\nCodex 앱을 완전히 종료한 뒤 이 실행기를 여세요. 원래 앱으로 열면 기존 실행 방식으로 돌아갑니다.`);
   },
   async pending() {
     const list = await api('/requests?status=pending');
@@ -93,6 +99,7 @@ const commands = {
     console.log(`approve-here <command>
 
   install --claude --codex  훅을 CLI 설정에 등록 (한 번)
+  install-codex-launcher    Codex 앱 질문·승인 중계 실행기 설치
   uninstall --claude --codex  훅 제거
   tui                       이 터미널(tmux pane)을 대기함으로  ← 인자 없이 실행하면 이것
   app                       macOS 메뉴바 앱 (없으면 내려받음)
