@@ -16,7 +16,8 @@
     "hook/",
     "surfaces/tui/",
     "surfaces/web/",
-    "README.md"
+    "README.md",
+    "docs/CODEX.md"
   ],
   "scripts": {
     "start": "node bin/approve-here.mjs start",
@@ -40,5 +41,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "ws": "^8.22.0"
   }
 }
