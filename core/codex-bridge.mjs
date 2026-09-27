@@ -5,11 +5,13 @@ import { join } from 'node:path';
 import { loadConfig, readAllowlist } from './config.mjs';
 import { allowlistDecision, runPolicyHooks } from './policy.mjs';
 import { sessionContext } from './transcript.mjs';
+import { connect } from 'node:net';
 
 const METHODS = new Set(['item/commandExecution/requestApproval', 'item/fileChange/requestApproval', 'item/permissions/requestApproval', 'item/tool/requestUserInput']);
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 
 /** Connect to the existing shared Codex server. Never start threads or change their settings. */
-export function startCodexBridge({ home, store, surfaceActive, userHome = homedir(), intervalMs = 2000, socketPath, enabled, log = () => {} }) {
+export function startCodexBridge({ home, store, surfaceActive, userHome = homedir(), intervalMs = 2000, socketPath, relay = false, enabled, log = () => {} }) {
   const codexHome = process.env.CODEX_HOME || join(userHome, '.codex');
   const path = socketPath || join(codexHome, 'app-server-control', 'app-server-control.sock');
   const active = enabled || (() => {
@@ -38,6 +40,8 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
       send({ id, method, params }).catch(error => { clearTimeout(timer); rpc.delete(id); reject(error); });
     });
   }
+
+  const respond = (id, result) => relay ? call('approveHere/decision', { requestId: id, result }) : send({ id, result });
 
   function disconnected() {
     status.connected = false;
@@ -127,7 +131,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
       if (!surfaceActive() || !active()) { requests.delete(message.id); return; }
       if (decision) {
         entry.responding = true;
-        await send({ id: message.id, result: responseFor(entry, decision) });
+        await respond(message.id, responseFor(entry, decision));
         store.create({ ...recordInput, status: 'auto', decision, decidedBy });
         return;
       }
@@ -146,7 +150,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
       return { answers };
     }
     if (entry.method === 'item/permissions/requestApproval') return { permissions: decision.behavior === 'allow' ? entry.params.permissions : {}, scope: 'turn' };
-    const value = decision.behavior === 'allow' ? 'accept' : 'decline';
+    const value = decision.behavior === 'allow' ? 'accept' : entry.params.availableDecisions && !entry.params.availableDecisions.includes('decline') && entry.params.availableDecisions.includes('cancel') ? 'cancel' : 'decline';
     if (entry.params.availableDecisions && !entry.params.availableDecisions.includes(value)) throw new Error('이 요청은 Codex 원래 화면에서 처리해 주세요.');
     return { decision: value };
   }
@@ -158,7 +162,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
     try {
       if (!ws || ws.readyState === WebSocket.CLOSED) {
         if (!existsSync(path)) { status.error = 'Codex 로컬 App Server를 찾지 못했습니다.'; return; }
-        ws = new WebSocket(`ws+unix://${path}:/`, { handshakeTimeout: 5000, maxPayload: 16 * 1024 * 1024 });
+        ws = new WebSocket('ws://localhost/', { createConnection: () => connect(path), handshakeTimeout: 5000, maxPayload: 16 * 1024 * 1024 });
         ws.on('message', data => {
           try { receive(JSON.parse(data.toString())).catch(error => { status.error = error.message; log(error.message); }); }
           catch (error) { status.error = error.message; }
@@ -166,7 +170,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
         ws.on('close', disconnected);
         ws.on('error', error => { status.error = error.message; });
         await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
-        await call('initialize', { clientInfo: { name: 'approve_here', title: 'Approve Here', version: '0.4.0' }, capabilities: { experimentalApi: true } });
+        await call('initialize', { clientInfo: { name: 'approve_here', title: 'Approve Here', version: VERSION }, capabilities: { experimentalApi: true } });
         await send({ method: 'initialized' });
         status.connected = true; status.error = null;
       }
@@ -197,6 +201,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
   return {
     status,
     ownsSession: id => status.connected && subscribed.has(id),
+    ownsRequest: id => [...requests.values()].some(entry => entry.record?.id === id),
     reviewerFor: id => status.connected ? reviewers.get(id) ?? null : null,
     async decide(record, decision) {
       const pair = [...requests].find(([, entry]) => entry.record?.id === record.id);
@@ -205,7 +210,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
       if (decision.passthrough) { suppressed.add(id); requests.delete(id); return; }
       const result = responseFor(entry, decision);
       entry.responding = true;
-      try { await send({ id, result }); }
+      try { await respond(id, result); }
       catch (error) { entry.responding = false; throw error; }
     },
     close() { stopped = true; clearInterval(timer); ws?.terminate(); disconnected(); },

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Store, PENDING } from './store.mjs';
 import { ensureHome, ensureToken, loadConfig, readAllowlist, writeAllowlist, writeDaemonInfo } from './config.mjs';
 import { defaultTmux } from './tmux.mjs';
-import { startCodexBridge } from './codex-bridge.mjs';
+import { startCodexConnections } from './codex-connections.mjs';
 
 const MAX_BODY = 256 * 1024;
 const MAX_WAIT_SECONDS = 30;
@@ -45,7 +45,7 @@ export async function startDaemon({
   const server = createServer((req, res) => handle(req, res).catch(error => fail(res, error)));
 
   const surfaceActive = () => Date.now() - lastSurfaceAt < presenceMs;
-  const bridge = codexBridge ? startCodexBridge({ home: root, store, surfaceActive, ...(typeof codexBridge === 'object' ? codexBridge : {}) }) : null;
+  const bridge = codexBridge ? startCodexConnections({ home: root, store, surfaceActive, ...(typeof codexBridge === 'object' ? codexBridge : {}) }) : null;
   store.subscribe(() => (lastActivityAt = Date.now()));
   // 표면도 대기 요청도 없이 오래 놀면 물러난다. 표면이 다시 열리면 ensureDaemon이 새로 띄운다.
   const idleTimer =
