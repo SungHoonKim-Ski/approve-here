@@ -109,7 +109,7 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
 <key>CFBundleName</key><string>Codex with Approve Here</string>
 <key>CFBundleExecutable</key><string>launcher</string>
 <key>CFBundlePackageType</key><string>APPL</string>
-<key>CFBundleShortVersionString</key><string>0.5.1</string>
+<key>CFBundleShortVersionString</key><string>0.5.2</string>
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>ApproveHereTarget</key><string>${xml(app)}</string>
 </dict></plist>\n`);
