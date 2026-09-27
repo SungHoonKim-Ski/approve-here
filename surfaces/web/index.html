@@ -74,6 +74,7 @@
     : r.toolName;
   const NEVER_REMEMBER = new Set(['rm', 'sudo', 'dd', 'mkfs', 'kill', 'killall', 'shutdown', 'reboot', 'chmod', 'chown', 'curl', 'wget']);
   const prefix = r => {
+    if (r.toolName !== 'Bash') return null;
     if (typeof r.toolInput?.command !== 'string') return null;
     const words = r.toolInput.command.trim().split(/\s+/);
     return NEVER_REMEMBER.has(words[0]) ? null : words.slice(0, 2).join(' ');  // 되돌릴 수 없는 명령은 기억시키지 않는다
