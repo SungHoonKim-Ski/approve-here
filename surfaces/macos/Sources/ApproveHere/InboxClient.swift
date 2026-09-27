@@ -101,7 +101,7 @@ enum AnyCodable: Decodable, Equatable {
   }
 }
 
-struct CodexConnectionStatus: Decodable { let connected: Bool; let error: String? }
+struct CodexConnectionStatus: Decodable { let connected: Bool; let error: String?; let relayCount: Int? }
 struct InboxHealth: Decodable { let codexAppServer: CodexConnectionStatus? }
 
 struct DaemonInfo: Decodable { let port: Int }

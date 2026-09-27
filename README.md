@@ -13,7 +13,8 @@
 1. [Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 **ApproveHere.dmg**를 내려받아 열고, 앱을 Applications로 끌어 넣습니다.
 2. 앱을 엽니다. Apple 서명이 없어 처음 한 번은 막힐 수 있습니다 — 시스템 설정 → 개인정보 보호 및 보안 → "그래도 열기"를 누르거나, 앱을 우클릭 → 열기.
 3. 메뉴바의 아이콘을 눌러 **Claude Code 연결**, **Codex 연결**을 켭니다. 쓰는 것만 켜도 됩니다.
-4. 끝입니다. 승인·질문이 생기면 화면 오른쪽 위에 카드가 뜹니다.
+4. Codex 앱의 질문도 받으려면 메뉴의 **Codex 앱 중계 실행기 설치…**를 누르고, Codex를 완전히 종료한 뒤 `~/Applications/Codex with Approve Here.app`으로 엽니다. [연결 안내](docs/CODEX.md)를 참고하세요.
+5. 승인·질문이 생기면 화면 오른쪽 위에 카드가 뜹니다.
 
 Codex는 새 훅을 처음 만나면 **신뢰 확인**을 요구합니다. 연결을 켠 뒤 처음 `codex`를 실행하면 "Hooks need review"가 뜨는데, 검토 후 신뢰하면 됩니다.
 
@@ -83,7 +84,7 @@ Claude Code / Codex ── 훅 또는 Codex 로컬 App Server ──▶ 앱 안�
 
 ## 하지 않는 것
 
-- Codex 질문 답변은 공유 로컬 App Server에 연결되는 앱·CLI에서 지원합니다. 별도 stdio 서버의 앱에서는 질문을 원래 앱에서 받으며, “나 대신 승인” 권한 요청은 카드 없이 Codex 자동 검토로 넘어갑니다. 비밀 입력 질문도 원래 Codex 화면에서 받습니다. [연결 조건](docs/CODEX.md)을 확인하세요. Claude Code 질문 답변은 문서에 없는 동작(2.1.283 실측)을 사용하므로 버전에 따라 원래 다이얼로그로 돌아갈 수 있습니다.
+- Codex 질문 답변은 앱 중계 실행기 또는 공유 로컬 App Server에 연결되는 세션에서 지원합니다. “나 대신 승인” 권한 요청은 카드 없이 Codex 자동 검토로 넘어갑니다. 비밀 입력 질문은 원래 Codex 화면에서 받습니다. [연결 조건](docs/CODEX.md)을 확인하세요. Claude Code 질문 답변은 문서에 없는 동작(2.1.283 실측)을 사용하므로 버전에 따라 원래 다이얼로그로 돌아갈 수 있습니다.
 - Apple 서명·공증이 없습니다. 첫 실행 한 번 시스템 설정에서 허용해야 하고, 그 때문에 macOS 시스템 알림은 쓰지 않습니다(카드 패널이 그 자리를 대신합니다).
 - Windows·Linux는 지원하지 않습니다.
 

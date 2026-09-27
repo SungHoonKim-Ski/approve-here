@@ -158,6 +158,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         let state = disabled(codexStatus?.connected == true ? "   Codex 앱·CLI 준비됨" : "   Codex 앱·CLI 연결 대기")
         state.toolTip = codexStatus?.error
         menu.addItem(state)
+        menu.addItem(disabled("   앱 중계 \(codexStatus?.relayCount ?? 0)개 연결됨"))
+        menu.addItem(action("Codex 앱 중계 실행기 설치…", #selector(installCodexLauncher)))
       }
     }
     menu.addItem(.separator())
@@ -281,6 +283,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   @objc private func retryNode() { bootstrap() }
   @objc private func openNodeDownload() { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }
+
+  @objc private func installCodexLauncher() {
+    guard let node else { return }
+    work.async { [weak self] in
+      let (code, output) = Runtime.run(node, [Runtime.cliScript.path, "install-codex-launcher"], env: ["APPROVE_HERE_HOME": Runtime.home.path], timeout: 10)
+      DispatchQueue.main.async {
+        self?.notice = code == 0 ? "중계 실행기 설치됨 — Codex를 종료한 뒤 ~/Applications에서 여세요" : output
+        self?.render()
+      }
+    }
+  }
   @objc private func openHome() { NSWorkspace.shared.open(Runtime.home) }
 
   @objc private func toggleLoginItem() {
