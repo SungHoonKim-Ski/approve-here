@@ -38,11 +38,28 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
-# ad-hoc 서명: 알림 권한 대화상자가 번들 신원을 요구한다. 배포 서명이 아니라 처음 열 때 우클릭 → 열기가 필요할 수 있다.
+# ad-hoc 서명: 알림 권한 대화상자가 번들 신원을 요구한다. 배포 서명·공증이 아니라 처음 열 때 Gatekeeper가 한 번 막는다(README "처음 열기").
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 ditto -c -k --keepParent "$APP" dist/ApproveHere.app.zip
-mkdir -p dist/dmg-stage && cp -R "$APP" dist/dmg-stage/ && ln -s /Applications dist/dmg-stage/Applications
-hdiutil create -quiet -volname "Approve Here" -srcfolder dist/dmg-stage -ov -format UDZO dist/ApproveHere.dmg
-rm -rf dist/dmg-stage
+# dmg: 앱 + Applications 링크 + "설치 안내.html". 창 배경에 끌어 넣기 그림과 막혔을 때 누를 곳을 그려 넣는다(dmg/make-background.swift).
+STAGE=dist/dmg-stage
+rm -rf "$STAGE" dist/rw.dmg && mkdir -p "$STAGE/.background"
+cp -R "$APP" "$STAGE/" && ln -s /Applications "$STAGE/Applications"
+cp "dmg/설치 안내.html" "$STAGE/"
+cp "$ROOT/docs/guide/gatekeeper-dialog.png" "$ROOT/docs/guide/gatekeeper-settings.png" "$STAGE/.background/"
+swift dmg/make-background.swift "$STAGE/.background/background.png" >/dev/null
+# 작업 중엔 고유한 볼륨 이름을 쓴다. 같은 이름의 dmg가 이미 마운트돼 있으면 Finder가 다른 볼륨을 잡는다.
+hdiutil create -quiet -volname "ApproveHereBuild" -srcfolder "$STAGE" -ov -format UDRW -fs HFS+ dist/rw.dmg
+ATTACHED=$(hdiutil attach -readwrite -noverify -noautoopen dist/rw.dmg | grep '/Volumes/')
+DEVICE=$(printf '%s' "$ATTACHED" | awk -F'\t' '{print $1}' | tr -d ' ')
+MOUNT=$(printf '%s' "$ATTACHED" | awk -F'\t' '{print $NF}')
+# Finder로 아이콘 위치·배경을 볼륨의 .DS_Store에 적는다(dmg/layout.applescript). Finder 자동화 권한이 없으면 배치 없는 dmg로 넘어간다.
+osascript dmg/layout.applescript "$MOUNT" >/dev/null 2>&1 || echo "  (dmg 창 배치를 건너뜀 — 터미널의 Finder 자동화 권한을 확인하세요)"
+# 이름을 되돌리면 마운트 경로도 바뀌므로 장치 노드로 분리한다.
+diskutil quiet rename "$MOUNT" "Approve Here"
+sync
+hdiutil detach -quiet "$DEVICE" || hdiutil detach -quiet -force "$DEVICE"
+hdiutil convert -quiet -format UDZO -o dist/ApproveHere.dmg dist/rw.dmg
+rm -rf "$STAGE" dist/rw.dmg
 echo "built: $PWD/$APP ($VERSION)"
 ls -la dist/ApproveHere.app.zip dist/ApproveHere.dmg | awk '{print "  "$5" "$9}'
