@@ -4,6 +4,7 @@
 set -eu
 cd "$(dirname "$0")"
 ROOT=../..
+npm ci --omit=dev --prefix "$ROOT"
 VERSION=$(node -p "require('$ROOT/package.json').version")
 swift build -c release
 APP=dist/ApproveHere.app
@@ -15,6 +16,8 @@ for d in bin core hook; do cp -R "$ROOT/$d" "$APP/Contents/Resources/core/"; don
 mkdir -p "$APP/Contents/Resources/core/surfaces"
 cp -R "$ROOT/surfaces/tui" "$ROOT/surfaces/web" "$APP/Contents/Resources/core/surfaces/"
 cp "$ROOT/package.json" "$APP/Contents/Resources/core/"
+# WebSocket transport for the local Codex App Server.
+cp -R "$ROOT/node_modules" "$APP/Contents/Resources/core/"
 # 앱 아이콘(icon/make-icon.swift로 만든 icns)
 [ -f icon/AppIcon.icns ] || { swift icon/make-icon.swift icon/AppIcon.iconset >/dev/null && iconutil -c icns icon/AppIcon.iconset -o icon/AppIcon.icns; }
 cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
