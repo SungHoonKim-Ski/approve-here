@@ -15,6 +15,8 @@ Approve Here의 메뉴에서 **Codex 연결**을 켜면 Codex 훅을 등록하�
 
 터미널에서 설치하려면 `approve-here install-codex-launcher`를 실행하세요. 다른 앱·설치 위치는 `--app /Applications/Codex.app --target "$HOME/Applications/Codex with Approve Here.app"`으로 지정합니다. 설치한 실행기는 원래 앱을 덮어쓰지 않습니다. 원래 앱을 이동하거나 실행 파일 경로가 바뀌면 실행기를 다시 설치하세요.
 
+실행기 설치에는 macOS Command Line Tools의 Swift 컴파일러가 필요합니다. 설치돼 있지 않으면 터미널에서 `xcode-select --install`로 설치하세요. 첫 실행기 설치에는 컴파일 때문에 수십 초가 걸릴 수 있습니다.
+
 카드와 원래 앱에서 모두 답할 수 있으며 먼저 답한 쪽만 Codex에 전달됩니다. Approve Here가 꺼지거나 연결이 끊겨도 원래 앱 화면은 계속 사용할 수 있습니다. 비밀 질문·지원하지 않는 요청·큰 입력 전달 중의 요청은 원래 앱에서 처리합니다.
 
 Codex가 거부 대신 취소만 허용하는 승인 요청은 **거부** 버튼을 누르면 해당 턴을 취소합니다.
