@@ -177,6 +177,14 @@ test('비밀 입력·알 수 없는 서버 요청은 원래 Codex 화면에 남�
   assert.equal(b.sent.length, 0);
 });
 
+test('파일 변경 승인에는 명령 접두 자동 승인 규칙을 저장하지 않는다', async t => {
+  const b = await boot(t);
+  b.request({ id: 1, method: 'item/fileChange/requestApproval', params: { threadId: 'app-thread', turnId: 'turn', itemId: 'file' } });
+  const [card] = await until(b.pending, r => r.length === 1);
+  assert.equal((await b.decide(card.id, { behavior: 'allow', remember: { commandPrefix: '*** Begin' } })).code, 200);
+  assert.deepEqual((await b.api('/allowlist')).body, []);
+});
+
 test('App Server가 담당하는 세션은 PermissionRequest 훅 카드와 중복되지 않는다', async t => {
   const b = await boot(t);
   const output = await new Promise(resolve => {
