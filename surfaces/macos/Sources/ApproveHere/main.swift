@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var notice: String?
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
+  private var hotkey: GlobalHotkey?
   private var notificationsGranted = false
   private let work = DispatchQueue(label: "approve-here.runtime")
 
@@ -36,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     item.menu = NSMenu()
+    // 노치 노트북처럼 메뉴바가 좁으면 macOS가 우리 아이콘을 숨길 수 있다. 그때도 메뉴는 단축키로 부른다.
+    hotkey = GlobalHotkey { [weak self] in self?.showMenuFromHotkey() }
     cards = CardPanelController(actions: .init(
       allow: { [weak self] r in self?.decide(r.id, "allow", nil) },
       allowRemember: { [weak self] r in self?.decide(r.id, "allow", r.commandPrefix) },
@@ -176,6 +179,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(action("시작 안내", #selector(showOnboarding)))
     menu.addItem(action("카드 시험해 보기", #selector(showDemoCard)))
     menu.addItem(action("도움말 (README)", #selector(openHelp)))
+    menu.addItem(disabled("아이콘이 숨겨져도 \(GlobalHotkey.label)로 이 메뉴가 뜹니다"))
     menu.addItem(.separator())
     let login = action("로그인 시 시작", #selector(toggleLoginItem))
     login.state = SMAppService.mainApp.status == .enabled ? .on : .off
@@ -183,6 +187,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(action("기록 폴더 열기", #selector(openHome)))
     menu.addItem(withTitle: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     item.menu = menu
+  }
+
+  /// 메뉴바 아이콘이 숨겨져 있어도 같은 메뉴를 마우스가 있는 화면 오른쪽 위에 띄운다(전역 단축키에서 부른다).
+  private func showMenuFromHotkey() {
+    render()
+    guard let menu = item.menu else { return }
+    let mouse = NSEvent.mouseLocation
+    let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) ?? NSScreen.screens.first
+    guard let frame = screen?.visibleFrame else { return }
+    Runtime.log("hotkey menu at screen=\(frame)")
+    NSApp.activate(ignoringOtherApps: true)
+    menu.popUp(positioning: nil, at: NSPoint(x: frame.maxX - 340, y: frame.maxY - 4), in: nil)
   }
 
   private func requestMenu(_ request: PendingRequest) -> NSMenuItem {

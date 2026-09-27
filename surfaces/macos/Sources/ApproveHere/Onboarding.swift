@@ -115,7 +115,7 @@ struct OnboardingView: View {
       }
 
       Divider()
-      Text("승인은 CLI가 원래 물어볼 상황에서만 옵니다. Claude Code가 auto 모드이거나 허용 목록에 있는 명령은 원래대로 조용히 지나갑니다. 이 안내는 메뉴바 아이콘 → \"시작 안내\"로 다시 볼 수 있습니다.")
+      Text("승인은 CLI가 원래 물어볼 상황에서만 옵니다. Claude Code가 auto 모드이거나 허용 목록에 있는 명령은 원래대로 조용히 지나갑니다. 이 안내는 메뉴바 아이콘 → \"시작 안내\"로 다시 볼 수 있습니다. 노트북처럼 메뉴바가 좁아 아이콘이 숨겨지면 \(GlobalHotkey.label)로 메뉴를 부릅니다.")
         .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
     .padding(14)
