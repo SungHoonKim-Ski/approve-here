@@ -358,7 +358,8 @@ struct RequestCardView: View {
     return Set(value.split(separator: ", ").map(String.init))
   }
 
-  /// 옵션은 고르기만 한다. 전송은 언제나 "답 보내기"(또는 Enter)로 — 잘못 누른 것을 바로잡을 틈을 둔다.
+  /// 질문이 하나인 단일 선택은 터미널 다이얼로그처럼 고르는 순간 보낸다 — 두 번째 클릭을 기다리면 카드가 안 닫히는 것으로 보인다(실측).
+  /// 여러 개 선택·직접 입력·질문이 여럿인 카드는 "답 보내기"(또는 Enter)로 보낸다 — 잘못 누른 것을 바로잡을 틈을 둔다.
   /// multiSelect는 토글이고, 답은 옵션 순서대로 ", "로 이어 보낸다(Claude가 다중 선택으로 받는 형식, 실측).
   private func pick(_ q: PendingRequest.Question, _ label: String) {
     if q.multiSelect ?? false {
@@ -368,8 +369,14 @@ struct RequestCardView: View {
       return
     }
     draft[q.answerKey] = draft[q.answerKey] == label ? nil : label
-    // 단일 선택은 고르면 다음 질문으로 넘어간다(마지막이면 답 보내기를 기다린다).
-    if draft[q.answerKey] != nil, !isLast { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { index += 1 } }
+    guard draft[q.answerKey] != nil else { return }
+    // 고른 표시가 잠깐 보이도록 한 박자 뒤에 움직인다.
+    if questions.count == 1 {
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { send() }
+    } else if !isLast {
+      // 질문이 여럿이면 다음 질문으로 넘어간다(마지막 질문은 답 보내기를 기다린다).
+      DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { index += 1 }
+    }
   }
 
   private func icon(_ q: PendingRequest.Question, chosen: Bool) -> String {
