@@ -4,7 +4,7 @@ Approve Here의 메뉴에서 **Codex 연결**을 켜면 Codex 훅을 등록하�
 
 ## Codex 앱의 질문 연결
 
-별도 stdio 서버를 쓰는 Codex 앱은 다음과 같이 연결합니다.
+별도 stdio 서버를 쓰는 Codex 앱은 다음과 같이 연결합니다. 왜 실행기가 필요한지와 증상별 확인은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있고, 여기는 동작 조건을 적습니다.
 
 1. Approve Here 0.5.0 이상의 메뉴에서 **Codex 앱 중계 실행기 설치…**를 선택합니다.
 2. 진행 중인 작업을 마친 뒤 Codex 앱을 완전히 종료합니다.
