@@ -170,7 +170,7 @@ export async function startDaemon({
       decided = store.decide(record.id, decision, 'user:codex');
     } else if (record.mode === 'mirror') decided = await driveTerminal(record, decision);
     else decided = store.decide(record.id, decision, 'user');
-    if (decided?.status === 'allowed' && input.remember?.commandPrefix) {
+    if (decided?.status === 'allowed' && record.toolName === 'Bash' && input.remember?.commandPrefix) {
       const rule = { tool: record.toolName, commandPrefix: input.remember.commandPrefix, provider: record.provider };
       writeAllowlist(root, [...readAllowlist(root), rule]);
     }
