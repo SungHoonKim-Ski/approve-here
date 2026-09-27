@@ -98,7 +98,9 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
     writeFileSync(launcher, launcherScript({ appBinary, realCli, nodePath, relayPath }));
     chmodSync(launcher, 0o755);
   }
-  writeFileSync(join(directory, 'codex-shim'), `#!/bin/sh\nexec ${quote(nodePath)} ${quote(stableRelay)} "$@"\n`);
+  // App tools may forward CODEX_CLI_PATH without the launcher's private environment.
+  // Keep the original executable with the shim so those invocations also work.
+  writeFileSync(join(directory, 'codex-shim'), `#!/bin/sh\nexport APPROVE_HERE_CODEX_CLI=${quote(realCli)}\nexec ${quote(nodePath)} ${quote(stableRelay)} "$@"\n`);
   chmodSync(join(directory, 'codex-shim'), 0o755);
   writeFileSync(join(destination, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
