@@ -182,10 +182,13 @@ final class InboxClient {
     try decodeRules(await request("/allowlist", method: "DELETE", body: ["rule": rule.value]))
   }
 
-  func decide(_ id: String, behavior: String, remember prefix: String? = nil) async throws {
+  @discardableResult
+  func decide(_ id: String, behavior: String, remember prefix: String? = nil) async throws -> String? {
     var body: [String: Any] = ["behavior": behavior]
     if let prefix { body["remember"] = ["commandPrefix": prefix] }
-    _ = try await request("/requests/\(id)/decision", method: "POST", body: body)
+    let data = try await request("/requests/\(id)/decision", method: "POST", body: body)
+    let receipt = try JSONDecoder().decode(DecisionReceipt.self, from: data)
+    return receipt.rememberError
   }
 
   /// 질문 카드의 답. {질문 원문: 고른 라벨 또는 직접 입력}. multiSelect는 라벨을 ", "로 잇는다.
@@ -202,6 +205,8 @@ final class InboxClient {
     _ = try await request("/requests/\(id)/jump", method: "POST")
   }
 }
+
+private struct DecisionReceipt: Decodable { let rememberError: String? }
 
 enum InboxError: LocalizedError {
   case daemonUnavailable

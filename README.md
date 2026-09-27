@@ -149,6 +149,7 @@ npm test                       # Node 코어 테스트
 sh surfaces/macos/test-settings.sh # macOS 설정 보존 테스트
 sh surfaces/macos/test-runtime.sh # 큰 출력·시간 제한·Node 버전 선택 검증
 sh surfaces/macos/test-rules.sh # 실제 네이티브 클라이언트와 임시 대기함의 규칙 해제 테스트
+sh surfaces/macos/test-decisions.sh # 실제 네이티브 승인 클라이언트의 규칙 저장 실패 안내 검증
 sh surfaces/macos/build.sh     # SwiftPM만으로 .app·zip·dmg (Xcode 불필요)
 APPROVE_HERE_SKIP_DMG=1 sh surfaces/macos/build.sh # Finder 자동화 없이 .app·zip만 빌드
 sh surfaces/macos/test-startup.sh # 빌드 앱의 코어로 기동·설정 오류·포트 충돌·복구 검증
