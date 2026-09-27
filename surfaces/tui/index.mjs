@@ -143,6 +143,7 @@ function summary(r) {
 // 되돌릴 수 없는 명령은 접두로 기억시키지 않는다.
 const NEVER_REMEMBER = new Set(['rm', 'sudo', 'dd', 'mkfs', 'kill', 'killall', 'shutdown', 'reboot', 'chmod', 'chown', 'curl', 'wget']);
 function commandPrefix(r) {
+  if (r.toolName !== 'Bash') return null;
   const command = r.toolInput?.command;
   if (typeof command !== 'string') return null;
   const words = command.trim().split(/\s+/);
