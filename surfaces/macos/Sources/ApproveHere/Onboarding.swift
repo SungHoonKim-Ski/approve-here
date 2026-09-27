@@ -65,10 +65,25 @@ final class OnboardingPanel {
     hosting.frame = NSRect(x: 0, y: 0, width: width, height: 10)
     panel.contentView = hosting
     hosting.layoutSubtreeIfNeeded()
-    let height = hosting.fittingSize.height
-    panel.setContentSize(NSSize(width: width, height: height > 40 && height < 1500 ? height : 320))
+    let measured = hosting.fittingSize.height
+    let height = measured.isFinite && measured > 40 ? measured : 320
     let mouse = NSEvent.mouseLocation
-    if let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) ?? NSScreen.screens.first {
+    let screen = NSScreen.screens.first(where: { $0.frame.insetBy(dx: -1, dy: -1).contains(mouse) }) ?? NSScreen.screens.first
+    let visibleHeight = min(height, max(100, (screen?.visibleFrame.height ?? 720) - 24))
+    if height > visibleHeight {
+      hosting.setFrameSize(NSSize(width: width, height: height))
+      let scroll = NSScrollView(frame: NSRect(x: 0, y: 0, width: width, height: visibleHeight))
+      scroll.hasVerticalScroller = true
+      scroll.scrollerStyle = .overlay
+      scroll.autohidesScrollers = true
+      scroll.drawsBackground = false
+      scroll.documentView = hosting
+      panel.contentView = scroll
+      scroll.contentView.scroll(to: NSPoint(x: 0, y: hosting.isFlipped ? 0 : height - visibleHeight))
+      scroll.reflectScrolledClipView(scroll.contentView)
+    }
+    panel.setContentSize(NSSize(width: width, height: visibleHeight))
+    if let screen {
       let frame = screen.visibleFrame
       panel.setFrameOrigin(NSPoint(x: frame.maxX - panel.frame.width - 12, y: frame.maxY - 12 - panel.frame.height))
     }
