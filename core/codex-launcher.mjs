@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync, chmodSync, lstatSync, realpathSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync, chmodSync, lstatSync, realpathSync, readFileSync, unlinkSync } from 'node:fs';
 import { join, basename, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -6,6 +6,46 @@ import { homedir } from 'node:os';
 
 const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 const xml = value => value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;');
+
+function launcherBinarySource({ appBinary, realCli, processName }) {
+  const swift = value => JSON.stringify(value);
+  return `import Foundation
+import Darwin
+
+let appBinary = ${swift(appBinary)}
+let realCli = ${swift(realCli)}
+let processName = ${swift(processName)}
+let arguments = Array(CommandLine.arguments.dropFirst())
+
+let guardProcess = Process()
+guardProcess.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+guardProcess.arguments = ["-x", processName]
+guardProcess.standardOutput = FileHandle.nullDevice
+guardProcess.standardError = FileHandle.nullDevice
+try? guardProcess.run()
+guardProcess.waitUntilExit()
+if guardProcess.terminationStatus == 0 {
+  FileHandle.standardError.write(Data("Codex 앱을 완전히 종료한 뒤 이 중계 실행기를 여세요.\\n".utf8))
+  exit(1)
+}
+
+let child = Process()
+child.executableURL = URL(fileURLWithPath: appBinary)
+child.arguments = arguments
+var environment = ProcessInfo.processInfo.environment
+environment["APPROVE_HERE_CODEX_CLI"] = realCli
+environment["CODEX_CLI_PATH"] = URL(fileURLWithPath: CommandLine.arguments[0]).deletingLastPathComponent().appendingPathComponent("codex-shim").path
+child.environment = environment
+do {
+  try child.run()
+  child.waitUntilExit()
+  exit(child.terminationStatus)
+} catch {
+  FileHandle.standardError.write(Data("Codex 실행 실패: \\(error)\\n".utf8))
+  exit(1)
+}
+`;
+}
 
 export function launcherScript({ appBinary, realCli, nodePath, relayPath }) {
   const processName = basename(appBinary).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -29,6 +69,7 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
   const name = inspectExecutable ? inspectExecutable(app) : execFileSync('/usr/libexec/PlistBuddy', ['-c', 'Print :CFBundleExecutable', join(app, 'Contents/Info.plist')], { encoding: 'utf8' }).trim();
   if (!name || name.includes('/') || name.includes('..')) throw new Error('앱 실행 파일 이름이 올바르지 않습니다.');
   const appBinary = join(app, 'Contents/MacOS', name);
+  const processName = basename(appBinary);
   const resources = join(app, 'Contents/Resources');
   const realCli = ['codex-cli/CodexCLI.app/Contents/MacOS/codex', 'codex', 'bin/codex'].map(path => join(resources, path)).find(existsSync);
   if (!realCli || !existsSync(appBinary)) throw new Error('앱에 포함된 Codex 실행 파일을 찾지 못했습니다.');
@@ -45,9 +86,20 @@ export function installCodexLauncher({ appPath, target, nodePath = process.execP
   }
   const directory = join(destination, 'Contents/MacOS');
   mkdirSync(directory, { recursive: true });
-  writeFileSync(join(directory, 'launcher'), launcherScript({ appBinary, realCli, nodePath, relayPath }));
+  const launcher = join(directory, 'launcher');
+  if (process.platform === 'darwin' && !inspectExecutable) {
+    const source = join(directory, '.launcher.swift');
+    writeFileSync(source, launcherBinarySource({ appBinary, realCli, processName }));
+    const cache = '/private/tmp/approve-here-swift-modules';
+    mkdirSync(cache, { recursive: true, mode: 0o700 });
+    try { execFileSync('/usr/bin/swiftc', ['-O', '-module-cache-path', cache, '-Xcc', '-fmodules-cache-path=' + cache, '-o', launcher, source], { stdio: 'inherit' }); }
+    finally { try { unlinkSync(source); } catch {} }
+  } else {
+    writeFileSync(launcher, launcherScript({ appBinary, realCli, nodePath, relayPath }));
+    chmodSync(launcher, 0o755);
+  }
   writeFileSync(join(directory, 'codex-shim'), `#!/bin/sh\nexec ${quote(nodePath)} ${quote(stableRelay)} "$@"\n`);
-  for (const file of ['launcher', 'codex-shim']) chmodSync(join(directory, file), 0o755);
+  chmodSync(join(directory, 'codex-shim'), 0o755);
   writeFileSync(join(destination, 'Contents/Info.plist'), `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
