@@ -68,6 +68,8 @@ Codex 앱은 열릴 때 자기 안에 든 Codex 실행 파일을 띄우고, 그 
 3. 시작 안내의 **설치된 실행기 보기**를 누르고 **Codex with Approve Here**를 엽니다. Finder에서 홈 폴더 → Applications, 또는 Spotlight에서 "Codex with"를 찾아도 됩니다. 자주 쓰면 Dock에 끌어다 놓으세요.
 4. 메뉴바 아이콘을 눌러 **Codex 앱 연결됨 (1개)**를 확인합니다. **Codex CLI 질문 연결됨**은 별도의 CLI 연결 상태입니다. 터미널에서는 `approve-here status`가 각각의 연결 상태를 보여 줍니다.
 
+배포 앱에는 미리 빌드한 실행기가 포함돼 있어, 앱에서 설치할 때 Xcode나 Command Line Tools를 설치할 필요가 없습니다. 설치에 실패하면 기존 실행기는 유지되고 다시 시도할 수 있습니다. npm으로만 설치한 CLI에서 실행기를 만들 때는 Swift 컴파일러가 필요합니다.
+
 이후로 Codex는 이 실행기로 엽니다. 원래 앱 아이콘으로 열면 예전 방식으로 돌아갑니다. 그래도 승인 훅과 "나 대신 승인" 인계는 그대로 되고, 질문만 앱 안에서 받게 됩니다. Codex를 로그인 항목에 넣어 두었다면 그 항목을 실행기로 바꿉니다(시스템 설정 → 일반 → 로그인 항목).
 
 실행기를 지우려면 `~/Applications`에서 그 앱을 삭제하면 끝입니다. 원래 앱에는 아무 흔적이 남지 않습니다.
@@ -147,6 +149,8 @@ npm test                       # Node 코어 테스트
 sh surfaces/macos/test-settings.sh # macOS 설정 보존 테스트
 sh surfaces/macos/test-rules.sh # 실제 네이티브 클라이언트와 임시 대기함의 규칙 해제 테스트
 sh surfaces/macos/build.sh     # SwiftPM만으로 .app·zip·dmg (Xcode 불필요)
+APPROVE_HERE_SKIP_DMG=1 sh surfaces/macos/build.sh # Finder 자동화 없이 .app·zip만 빌드
+node surfaces/macos/Tests/launcher-smoke.mjs # 실제 번들 실행기: 컴파일러 없이 설치·인자 전달 검증
 ```
 
 MIT
