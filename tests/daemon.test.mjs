@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { startDaemon } from '../core/daemon.mjs';
@@ -87,6 +87,47 @@ test('remember가 있는 allow는 allowlist에 규칙을 추가한다', async t 
   const rules = JSON.parse(readFileSync(join(home, 'allowlist.json'), 'utf8'));
   assert.deepEqual(rules, [{ tool: 'Bash', commandPrefix: 'npm test', provider: 'codex' }]);
   assert.deepEqual(await (await api('/allowlist')).json(), rules);
+});
+
+test('자동 승인 해제는 선택한 원문 규칙만 지우고 목록을 연 뒤 추가된 규칙도 보존한다', async t => {
+  const { api, home } = await boot(t);
+  const selected = { tool: 'Bash', commandPrefix: 'npm test', provider: 'codex', note: '기존 설정' };
+  const other = { tool: 'Bash', commandPrefix: 'npm test', provider: 'claude' };
+  await api('/allowlist', { method: 'PUT', body: JSON.stringify([selected, other]) });
+  const snapshot = await (await api('/allowlist')).json();
+  const created = await (await api('/requests', { method: 'POST', body: JSON.stringify(sample) })).json();
+  await api(`/requests/${created.id}/decision`, { method: 'POST', body: JSON.stringify({ behavior: 'allow', remember: { commandPrefix: 'git status' } }) });
+  const removed = await api('/allowlist', { method: 'DELETE', body: JSON.stringify({ rule: snapshot[0] }) });
+  assert.equal(removed.status, 200);
+  const expected = [other, { tool: 'Bash', commandPrefix: 'git status', provider: 'codex' }];
+  assert.deepEqual(await removed.json(), expected);
+  assert.deepEqual(JSON.parse(readFileSync(join(home, 'allowlist.json'), 'utf8')), expected);
+  assert.equal((await api('/allowlist', { method: 'DELETE', body: JSON.stringify({ rule: selected }) })).status, 409);
+  assert.deepEqual(await (await api('/allowlist')).json(), expected);
+});
+
+test('자동 승인 해제는 인증과 정확한 규칙을 요구하며 실패하면 파일을 바꾸지 않는다', async t => {
+  const { api, home, daemon } = await boot(t);
+  const rules = [{ tool: 'Bash', commandPrefix: 'npm test', provider: 'codex', note: '보존' }];
+  await api('/allowlist', { method: 'PUT', body: JSON.stringify(rules) });
+  const before = readFileSync(join(home, 'allowlist.json'), 'utf8');
+  const anon = await fetch(`http://127.0.0.1:${daemon.port}/allowlist`, { method: 'DELETE', body: JSON.stringify({ rule: rules[0] }) });
+  assert.equal(anon.status, 401);
+  assert.equal((await api('/allowlist', { method: 'DELETE', body: '{}' })).status, 400);
+  assert.equal((await api('/allowlist', { method: 'DELETE', body: JSON.stringify({ rule: { ...rules[0], note: '변경됨' } }) })).status, 409);
+  assert.equal(readFileSync(join(home, 'allowlist.json'), 'utf8'), before);
+  const reordered = { note: '보존', provider: 'codex', commandPrefix: 'npm test', tool: 'Bash' };
+  assert.equal((await api('/allowlist', { method: 'DELETE', body: JSON.stringify({ rule: reordered }) })).status, 200);
+  assert.deepEqual(await (await api('/allowlist')).json(), []);
+});
+
+test('잘못된 자동 승인 파일을 빈 목록으로 표시하거나 해제 중 덮어쓰지 않는다', async t => {
+  const { api, home } = await boot(t);
+  const invalid = '{"unexpected":"preserve me"}\n';
+  writeFileSync(join(home, 'allowlist.json'), invalid);
+  assert.equal((await api('/allowlist')).status, 500);
+  assert.equal((await api('/allowlist', { method: 'DELETE', body: JSON.stringify({ rule: { tool: 'Bash', commandPrefix: 'npm test' } }) })).status, 500);
+  assert.equal(readFileSync(join(home, 'allowlist.json'), 'utf8'), invalid);
 });
 
 test('자동 처리(policy) 기록은 pending에 오르지 않고 recent에 남는다', async t => {

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Store, PENDING } from './store.mjs';
 import { ensureHome, ensureToken, loadConfig, readAllowlist, writeAllowlist, writeDaemonInfo } from './config.mjs';
+import { isDeepStrictEqual } from 'node:util';
 import { defaultTmux } from './tmux.mjs';
 import { startCodexConnections } from './codex-connections.mjs';
 
@@ -108,6 +109,18 @@ export async function startDaemon({
     }
     if (resource === 'allowlist') {
       if (req.method === 'GET') return json(res, 200, readAllowlist(root));
+      if (req.method === 'DELETE') {
+        const input = await body(req);
+        if (!input || Array.isArray(input) || typeof input !== 'object' || !Object.hasOwn(input, 'rule'))
+          throw new HttpError(400, '해제할 규칙을 지정해 주세요.');
+        // 목록을 연 뒤 추가된 다른 규칙을 덮어쓰지 않고, 선택한 규칙 하나만 제거한다.
+        const rules = readAllowlist(root);
+        const index = rules.findIndex(rule => isDeepStrictEqual(rule, input.rule));
+        if (index < 0) throw new HttpError(409, '이미 해제됐거나 변경된 규칙입니다. 목록을 다시 확인해 주세요.');
+        rules.splice(index, 1);
+        writeAllowlist(root, rules);
+        return json(res, 200, rules);
+      }
       if (req.method === 'PUT') {
         const rules = await body(req);
         if (!Array.isArray(rules)) throw new HttpError(400, 'allowlist는 배열이어야 합니다.');
