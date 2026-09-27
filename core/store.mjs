@@ -48,8 +48,8 @@ export class Store {
       createdAt: now,
       updatedAt: now,
     });
-    this.requests.set(record.id, record);
     this.append('registered', record);
+    this.requests.set(record.id, record);
     this.emit('registered', record);
     return record;
   }
@@ -81,26 +81,22 @@ export class Store {
     if (!current || current.status !== PENDING) return null;
     const status = decision.answers ? 'answered' : decision.passthrough ? 'passed' : decision.behavior === 'allow' ? 'allowed' : 'denied';
     const next = Object.freeze({ ...current, status, decision, decidedBy, updatedAt: new Date().toISOString() });
-    this.settle(next, 'decided');
-    return next;
+    return this.settle(next, 'decided');
   }
 
   expire(id, status = 'expired') {
     const current = this.requests.get(id);
     if (!current || current.status !== PENDING) return current ?? null;
     const next = Object.freeze({ ...current, status, updatedAt: new Date().toISOString() });
-    this.settle(next, status);
-    return next;
+    return this.settle(next, status);
   }
 
   /** 승인은 이미 전달됐지만 규칙 저장에 실패한 경우, 그 사실을 같은 처리 이력에 남긴다. */
   rememberFailed(id, message) {
     const current = this.requests.get(id);
     if (!current || current.status !== 'allowed') return current ?? null;
-    const next = Object.freeze({ ...current, rememberError: message, updatedAt: new Date().toISOString() });
+    const next = this.recordOrWarn('remember_failed', Object.freeze({ ...current, rememberError: message, updatedAt: new Date().toISOString() }));
     this.requests.set(id, next);
-    try { this.append('remember_failed', next); }
-    catch (error) { console.error('[approve-here] 규칙 저장 실패 기록을 쓰지 못했습니다:', error); }
     this.emit('remember_failed', next);
     return next;
   }
@@ -130,14 +126,26 @@ export class Store {
   }
 
   settle(record, kind) {
-    this.requests.set(record.id, record);
-    this.append(kind, record);
+    const settled = this.recordOrWarn(kind, record);
+    this.requests.set(settled.id, settled);
     const set = this.waiters.get(record.id);
     if (set) {
       this.waiters.delete(record.id);
-      for (const resolve of set) resolve(record);
+      for (const resolve of set) resolve(settled);
     }
-    this.emit(kind, record);
+    this.emit(kind, settled);
+    return settled;
+  }
+
+  recordOrWarn(kind, record) {
+    try { this.append(kind, record); return record; }
+    catch (error) {
+      console.error('[approve-here] 처리 이력을 저장하지 못했습니다:', error);
+      const message = record.decision
+        ? '답변은 전달했지만 처리 이력을 저장하지 못했습니다. 기록 폴더의 requests.jsonl과 저장 공간을 확인해 주세요.'
+        : '요청 상태는 갱신했지만 처리 이력을 저장하지 못했습니다. 기록 폴더의 requests.jsonl과 저장 공간을 확인해 주세요.';
+      return Object.freeze({ ...record, historyError: message });
+    }
   }
 
   emit(kind, record) {
