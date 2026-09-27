@@ -93,6 +93,18 @@ export class Store {
     return next;
   }
 
+  /** 승인은 이미 전달됐지만 규칙 저장에 실패한 경우, 그 사실을 같은 처리 이력에 남긴다. */
+  rememberFailed(id, message) {
+    const current = this.requests.get(id);
+    if (!current || current.status !== 'allowed') return current ?? null;
+    const next = Object.freeze({ ...current, rememberError: message, updatedAt: new Date().toISOString() });
+    this.requests.set(id, next);
+    try { this.append('remember_failed', next); }
+    catch (error) { console.error('[approve-here] 규칙 저장 실패 기록을 쓰지 못했습니다:', error); }
+    this.emit('remember_failed', next);
+    return next;
+  }
+
   /** 결정이 날 때까지 기다린다. timeoutMs 안에 결정이 없으면 현재 레코드를 그대로 돌려준다. */
   wait(id, timeoutMs) {
     const current = this.requests.get(id);
