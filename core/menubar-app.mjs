@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { ensureHome } from './config.mjs';
@@ -7,7 +8,7 @@ import { ensureHome } from './config.mjs';
 const run = promisify(execFile);
 const REPO = 'SungHoonKim-Ski/approve-here';
 const ASSET = 'ApproveHere.app.zip';
-const LOCAL_BUILD = new URL('../surfaces/macos/dist/ApproveHere.app', import.meta.url).pathname;
+const LOCAL_BUILD = fileURLToPath(new URL('../surfaces/macos/dist/ApproveHere.app', import.meta.url));
 
 /**
  * 메뉴바 앱을 찾아 연다. 소스 checkout에서 빌드한 것이 있으면 그것, 없으면 데이터 폴더의 사본,

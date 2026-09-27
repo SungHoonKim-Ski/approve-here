@@ -1,6 +1,7 @@
 import { createServer } from 'node:http';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Store, PENDING } from './store.mjs';
 import { ensureHome, ensureToken, loadConfig, readAllowlist, writeAllowlist, writeDaemonInfo } from './config.mjs';
 import { defaultTmux } from './tmux.mjs';
@@ -8,7 +9,7 @@ import { startCodexBridge } from './codex-bridge.mjs';
 
 const MAX_BODY = 256 * 1024;
 const MAX_WAIT_SECONDS = 30;
-const WEB_DIR = new URL('../surfaces/web/', import.meta.url).pathname;
+const WEB_DIR = fileURLToPath(new URL('../surfaces/web/', import.meta.url));
 
 class HttpError extends Error {
   constructor(status, message) {
