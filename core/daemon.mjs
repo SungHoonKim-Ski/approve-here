@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHmac } from 'node:crypto';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -61,8 +62,13 @@ export async function startDaemon({
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
     const [, resource, id, action] = url.pathname.split('/');
-    if (req.method === 'GET' && url.pathname === '/health')
-      return json(res, 200, { ok: true, pid: process.pid, pending: store.list(PENDING).length, surfaceActive: surfaceActive(), codexAppServer: bridge?.status ?? null });
+    if (req.method === 'GET' && url.pathname === '/health') {
+      const challenge = url.searchParams.get('challenge');
+      if (challenge !== null && !/^[a-f0-9]{48}$/.test(challenge)) throw new HttpError(400, '잘못된 상태 확인 요청입니다.');
+      // 호출자가 토큰을 보내지 않아도 같은 홈의 대기함인지 확인할 수 있다.
+      const proof = challenge === null ? undefined : createHmac('sha256', token).update(challenge).digest('hex');
+      return json(res, 200, { ok: true, service: 'approve-here', healthProtocol: 1, proof, pid: process.pid, pending: store.list(PENDING).length, surfaceActive: surfaceActive(), codexAppServer: bridge?.status ?? null });
+    }
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/assets/'))) return serveWeb(url.pathname, res);
     authorize(req, url);
     if (resource === 'codex' && req.method === 'GET') {
