@@ -183,6 +183,15 @@ export async function startDaemon({
       return store.decide(record.id, decision, 'user');
     }
     if (input.answers || input.passthrough) throw new HttpError(400, '권한 카드에는 behavior(allow|deny)를 보내세요.');
+    const remembering = input.behavior === 'allow' && record.toolName === 'Bash' && input.remember?.commandPrefix;
+    // 읽을 수 없는 규칙 파일 때문에 승인 전송 뒤에 실패를 보고하지 않도록 먼저 확인한다.
+    // 실제 저장 시에는 다시 읽어 비동기 승인 전달 중 추가된 규칙도 보존한다.
+    if (remembering) {
+      try { readAllowlist(root); }
+      catch (error) {
+        throw new HttpError(500, `자동 승인 규칙을 읽지 못해 요청을 허용하지 않았습니다. 이번만 허용하거나 규칙 파일을 확인해 주세요. ${error.message}`);
+      }
+    }
     const decision = input.message ? { behavior: input.behavior, message: input.message } : { behavior: input.behavior };
     let decided;
     if (record.mode === 'codex') {
@@ -190,7 +199,7 @@ export async function startDaemon({
       decided = store.decide(record.id, decision, 'user:codex');
     } else if (record.mode === 'mirror') decided = await driveTerminal(record, decision);
     else decided = store.decide(record.id, decision, 'user');
-    if (decided?.status === 'allowed' && record.toolName === 'Bash' && input.remember?.commandPrefix) {
+    if (decided?.status === 'allowed' && remembering) {
       const rule = { tool: record.toolName, commandPrefix: input.remember.commandPrefix, provider: record.provider };
       writeAllowlist(root, [...readAllowlist(root), rule]);
     }

@@ -130,6 +130,65 @@ test('잘못된 자동 승인 파일을 빈 목록으로 표시하거나 해제 
   assert.equal(readFileSync(join(home, 'allowlist.json'), 'utf8'), invalid);
 });
 
+for (const invalid of ['{"unexpected":"preserve me"}\n', '{broken\n']) {
+  test(`자동 규칙을 읽지 못하면 허용을 처리하기 전에 실패하며 이번만 허용은 가능하다: ${invalid.trim()}`, async t => {
+    const { api, home } = await boot(t);
+    writeFileSync(join(home, 'allowlist.json'), invalid);
+    const created = await (await api('/requests', { method: 'POST', body: JSON.stringify(sample) })).json();
+    const remembered = await api(`/requests/${created.id}/decision`, {
+      method: 'POST', body: JSON.stringify({ behavior: 'allow', remember: { commandPrefix: 'npm test' } }),
+    });
+    assert.equal(remembered.status, 500);
+    assert.match((await remembered.json()).error, /요청을 허용하지 않았습니다.*이번만 허용/);
+    assert.equal((await (await api(`/requests/${created.id}`)).json()).status, 'pending', '실패한 카드의 요청은 아직 허용되지 않아야 한다');
+    assert.equal(readFileSync(join(home, 'allowlist.json'), 'utf8'), invalid);
+    const once = await api(`/requests/${created.id}/decision`, { method: 'POST', body: JSON.stringify({ behavior: 'allow' }) });
+    assert.equal(once.status, 200);
+    assert.equal((await once.json()).status, 'allowed');
+    assert.equal(readFileSync(join(home, 'allowlist.json'), 'utf8'), invalid);
+  });
+}
+
+test('손상된 자동 규칙은 터미널에 허용 키를 전달하기 전 검출한다', async t => {
+  const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  let deliveries = 0;
+  const daemon = await startDaemon({ home, port: 0, tmux: { drive: async () => { deliveries++; return { ok: true }; } } });
+  t.after(() => daemon.close());
+  const api = (path, body) => fetch(`http://127.0.0.1:${daemon.port}${path}`, {
+    method: body ? 'POST' : 'GET', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  writeFileSync(join(home, 'allowlist.json'), '{broken\n');
+  const created = await (await api('/requests', { ...sample, mode: 'mirror' })).json();
+  assert.equal((await api(`/requests/${created.id}/decision`, { behavior: 'allow', remember: { commandPrefix: 'npm test' } })).status, 500);
+  assert.equal(deliveries, 0);
+  assert.equal((await (await api(`/requests/${created.id}`)).json()).status, 'pending');
+  assert.equal((await api(`/requests/${created.id}/decision`, { behavior: 'allow' })).status, 200);
+  assert.equal(deliveries, 1);
+});
+
+test('자동 규칙 사전 확인 뒤 승인 전달 중 추가된 규칙도 저장 때 보존한다', async t => {
+  const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
+  let finishDelivery, signalDelivery;
+  const delivery = new Promise(resolve => { signalDelivery = resolve; });
+  const finished = new Promise(resolve => { finishDelivery = resolve; });
+  const daemon = await startDaemon({ home, port: 0, tmux: { drive: async () => { signalDelivery(); await finished; return { ok: true }; } } });
+  t.after(() => daemon.close());
+  const api = (path, body) => fetch(`http://127.0.0.1:${daemon.port}${path}`, {
+    method: 'POST', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const created = await (await api('/requests', { ...sample, mode: 'mirror' })).json();
+  const response = api(`/requests/${created.id}/decision`, { behavior: 'allow', remember: { commandPrefix: 'npm test' } });
+  try {
+    await delivery;
+    const concurrent = { tool: 'Bash', commandPrefix: 'git status', provider: 'claude' };
+    writeFileSync(join(home, 'allowlist.json'), JSON.stringify([concurrent]));
+    finishDelivery();
+    assert.equal((await response).status, 200);
+    assert.deepEqual(JSON.parse(readFileSync(join(home, 'allowlist.json'), 'utf8')), [concurrent, { tool: 'Bash', commandPrefix: 'npm test', provider: 'codex' }]);
+  } finally { finishDelivery(); await response; }
+});
+
 test('자동 처리(policy) 기록은 pending에 오르지 않고 recent에 남는다', async t => {
   const { daemon, api } = await boot(t);
   const body = { ...sample, status: 'auto', decision: { behavior: 'allow', message: '읽기 전용' }, decidedBy: 'policy:permission-handler' };
