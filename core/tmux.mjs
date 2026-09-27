@@ -1,6 +1,10 @@
 import { execFile } from 'node:child_process';
+import { parseDialog, answerDialog } from './dialog.mjs';
 
 const KEY_DELAY_MS = 250;
+// 키를 보낸 뒤 화면이 바뀌길 기다리는 간격과 횟수(최대 약 1.5초).
+const READ_DELAY_MS = 150;
+const READ_TRIES = 10;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 function tmux(args) {
@@ -50,10 +54,8 @@ async function literal(pane, text) {
 
 /**
  * 카드에서 내린 결정을 그 세션의 터미널 다이얼로그에 키로 넣는다(mirror 모드).
- * 실측한 조작 규칙(Claude Code 2.1.283):
- *  - 단일 선택: 옵션 번호 한 글자로 즉시 선택, 질문이 여럿이면 다음 탭으로 자동 이동
- *  - 자유 입력: "Type something" 번호(옵션 수 + 1) → 텍스트 → Enter
- *  - 여러 개 선택: 번호로 토글 → → (Submit 탭) → Enter(또는 1)
+ * Claude 질문은 dialog.mjs가 화면을 읽으며 한 단계씩 넣는다 — 사람이 터미널에서 탭을 옮겼거나 일부를 답한 상태여도
+ * 실제 화면에 맞춰 움직이고, 기대와 어긋나면 더 보내지 않고 물러난다(그때 카드는 "터미널에서 답하라"로 끝난다).
  * Codex 승인 프롬프트: y = 허용, Esc = 거부.
  * 보내기 전에 화면을 읽어 다이얼로그가 아직 떠 있는지 본다 — 이미 답했으면 입력창에 글자가 들어가기 때문이다.
  */
@@ -64,32 +66,22 @@ export async function drive(record, decision) {
   if (before === null) return { ok: false, reason: 'no-pane' };
 
   if (record.kind === 'question') {
-    if (!/Enter to select/.test(before)) return { ok: false, reason: 'no-dialog' };
-    const questions = record.questions || [];
-    for (let i = 0; i < questions.length; i++) {
-      const q = questions[i];
-      const answer = decision.answers?.[q.question];
-      if (answer === undefined) return { ok: false, reason: 'missing-answer' };
-      const labels = (q.options || []).map(o => o.label);
-      const last = i === questions.length - 1;
-      if (q.multiSelect) {
-        for (const label of answer.split(', ')) {
-          const index = labels.indexOf(label);
-          if (index >= 0) await keys(pane, String(index + 1));
+    if (!/Enter to select|Ready to submit your answers/.test(before)) return { ok: false, reason: 'no-dialog' };
+    const io = {
+      // 키를 보낸 뒤 화면이 기대한 모양(expect)이 되기를 잠깐 기다려 읽는다. 기본은 "다이얼로그가 있다".
+      async read(expect = d => Boolean(d), { allowNull = false } = {}) {
+        let dialog = null;
+        for (let i = 0; i < READ_TRIES; i++) {
+          dialog = parseDialog(await screen({ pane }));
+          if (expect(dialog)) return dialog;
+          await sleep(READ_DELAY_MS);
         }
-        await keys(pane, 'Right'); // 다음 탭(다음 질문 또는 Submit)
-        if (last) await keys(pane, 'Enter');
-      } else if (labels.includes(answer)) {
-        await keys(pane, String(labels.indexOf(answer) + 1)); // 즉시 선택·자동 이동
-        if (last && questions.length > 1) await keys(pane, 'Enter'); // Submit 확인
-      } else {
-        await keys(pane, String(labels.length + 1)); // Type something
-        await literal(pane, answer);
-        await keys(pane, 'Enter');
-        if (last && questions.length > 1) await keys(pane, 'Enter');
-      }
-    }
-    return { ok: true };
+        return allowNull ? dialog : null;
+      },
+      send: key => keys(pane, key),
+      type: text => literal(pane, text),
+    };
+    return answerDialog(io, record.questions || [], decision.answers);
   }
 
   // Codex 승인 프롬프트
