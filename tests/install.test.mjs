@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { install, installInto, uninstallFrom, hookCommand } from '../core/install.mjs';
+import { install, installInto, uninstallFrom, hookCommand, codexHooksPath } from '../core/install.mjs';
 
 test('빈 홈에 Claude·Codex 훅을 등록하고, 두 번 실행해도 항목은 하나', () => {
   const userHome = mkdtempSync(join(tmpdir(), 'inbox-user-'));
@@ -26,7 +26,7 @@ test('빈 홈에 Claude·Codex 훅을 등록하고, 두 번 실행해도 항목�
   const codex = JSON.parse(readFileSync(join(userHome, '.codex/hooks.json'), 'utf8'));
   assert.match(codex.hooks.PermissionRequest[0].hooks[0].command, /--provider codex$/);
   assert.equal(codex.hooks.PreToolUse, undefined, 'Codex에는 AskUserQuestion이 없다');
-  assert.equal(codex.hooks.PostToolUse[0].matcher, 'Bash', 'Codex는 Bash가 끝난 신호로 mirror 카드를 지운다');
+  assert.equal(codex.hooks.PostToolUse[0].matcher, undefined, 'Codex의 파일·MCP 승인도 도구 종료 신호로 mirror 카드를 지운다');
   assert.equal(claude.hooks.PostToolUse[0].matcher, 'AskUserQuestion');
   assert.ok(logs.some(m => m.includes('Hooks need review')), 'Codex 신뢰 안내를 출력한다');
 });
@@ -74,4 +74,15 @@ test('uninstall은 우리 항목만 걷어낸다', () => {
 
 test('provider를 지정하지 않으면 거절한다', () => {
   assert.throws(() => install({ userHome: mkdtempSync(join(tmpdir(), 'inbox-user-')), log: () => {} }), /--claude, --codex/);
+});
+
+test('사용자 지정 Codex 홈에서 설치와 제거가 같은 훅 파일을 사용한다', () => {
+  const userHome = mkdtempSync(join(tmpdir(), 'inbox-user-'));
+  const codexHome = join(userHome, 'custom-codex');
+  const [result] = install({ codex: true, userHome, codexHome, log: () => {} });
+  const path = codexHooksPath(userHome, codexHome);
+  assert.equal(result.path, path);
+  assert.ok(JSON.parse(readFileSync(path, 'utf8')).hooks.PermissionRequest);
+  uninstallFrom(path);
+  assert.equal(JSON.parse(readFileSync(path, 'utf8')).hooks.PermissionRequest, undefined);
 });

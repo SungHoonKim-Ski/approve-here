@@ -127,3 +127,17 @@ test('tmux 밖의 질문은 mirror가 아니라 handoff로 간다', async t => {
   await api(`/requests/${pending[0].id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
   await running;
 });
+
+test('Codex mirror에서도 앞으로 자동을 저장하며 터미널 전달 실패 시 저장하지 않는다', async t => {
+  let success = true;
+  const tmux = { ...fakeTmux(), drive: async () => success ? { ok: true } : { ok: false, reason: 'no-dialog' } };
+  const { api } = await boot(t, tmux);
+  const create = async () => api('/requests', { method: 'POST', body: JSON.stringify({ provider: 'codex', sessionId: 'remember-codex', mode: 'mirror', toolName: 'Bash', toolInput: { command: 'npm run build' }, tmux: { pane: '%5' } }) });
+  const first = await create();
+  await api(`/requests/${first.id}/decision`, { method: 'POST', body: JSON.stringify({ behavior: 'allow', remember: { commandPrefix: 'npm run' } }) });
+  assert.deepEqual(await api('/allowlist'), [{ tool: 'Bash', commandPrefix: 'npm run', provider: 'codex' }]);
+  success = false;
+  const second = await create();
+  await api(`/requests/${second.id}/decision`, { method: 'POST', body: JSON.stringify({ behavior: 'allow', remember: { commandPrefix: 'npm' } }) });
+  assert.equal((await api('/allowlist')).length, 1);
+});
