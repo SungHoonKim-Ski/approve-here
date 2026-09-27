@@ -12,7 +12,7 @@
  */
 import { inboxHome, loadConfig, readToken, readAllowlist } from '../core/config.mjs';
 import { allowlistDecision, runPolicyHooks } from '../core/policy.mjs';
-import { sessionContext } from '../core/transcript.mjs';
+import { sessionContext, codexApprovalsReviewer } from '../core/transcript.mjs';
 
 const CONNECT_TIMEOUT_MS = 2000;
 const POLL_SECONDS = 25;
@@ -26,6 +26,8 @@ async function main() {
   const home = inboxHome();
   const config = loadConfig(home);
   const provider = argument('--provider') || detectProvider(input);
+  const reviewer = provider === 'codex' ? codexApprovalsReviewer(input.transcript_path, input.turn_id) : null;
+  if (input.hook_event_name === 'PermissionRequest' && ['auto_review', 'guardian_subagent'].includes(reviewer)) return;
   const question = input.hook_event_name === 'PreToolUse' && input.tool_name === 'AskUserQuestion';
   if (input.hook_event_name === 'PreToolUse' && !question) return; // 다른 PreToolUse는 우리 일이 아니다
   if (input.hook_event_name === 'PostToolUse') {
@@ -51,7 +53,7 @@ async function main() {
     const client = apiClient(home, config);
     const state = client ? await client.get(`/codex?sessionId=${encodeURIComponent(input.session_id || '')}`) : null;
     // Do not hold the hook open before Codex's own automatic reviewer can run.
-    if (['auto_review', 'guardian_subagent'].includes(state?.approvalsReviewer)) return;
+    if (reviewer === null && ['auto_review', 'guardian_subagent'].includes(state?.approvalsReviewer)) return;
     if (state?.bridged && ['Bash', 'apply_patch'].includes(input.tool_name)) return;
   }
   if (question && !request.context?.assistant) {
