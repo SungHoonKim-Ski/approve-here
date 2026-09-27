@@ -110,6 +110,7 @@ struct OnboardingView: View {
   let installingLauncher: Bool
   var startupError: String? = nil
   var checkingConnection = false
+  var loginStatus: SMAppService.Status = SMAppService.mainApp.status
   let actions: OnboardingPanel.Actions
   let close: () -> Void
 
@@ -172,8 +173,18 @@ struct OnboardingView: View {
           }
         }
         step(2, "로그인할 때 자동으로 켜지게") {
-          let on = SMAppService.mainApp.status == .enabled
-          Button(on ? "로그인 시 시작 켜짐 ✓" : "로그인 시 시작 켜기") { actions.toggleLogin() }.tint(on ? .green : nil).controlSize(.small)
+          if loginStatus == .requiresApproval {
+            Text("macOS의 승인이 필요합니다. 로그인 항목 설정에서 Approve Here를 허용해 주세요.")
+              .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Button("로그인 항목 설정 열기", action: actions.toggleLogin).controlSize(.small)
+          } else {
+            let on = loginStatus == .enabled
+            Button(on ? "로그인 시 시작 켜짐 ✓" : "로그인 시 시작 켜기", action: actions.toggleLogin).tint(on ? .green : nil).controlSize(.small)
+            if loginStatus == .notFound {
+              Text("macOS가 앱의 로그인 항목을 찾지 못했습니다. 설치된 앱을 다시 열고 시도해 주세요.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+          }
         }
         step(3, "어떻게 뜨는지 미리 봅니다") {
           Button("예시 카드 보기") { actions.demoCard() }.controlSize(.small)

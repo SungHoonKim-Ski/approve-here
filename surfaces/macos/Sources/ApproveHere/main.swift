@@ -20,6 +20,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var isBootstrapping = false
   private var startingDaemon = false
   private var startupError: String?
+  private var lastLoginStatus: SMAppService.Status?
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
   private var hotkey: GlobalHotkey?
@@ -196,6 +197,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   // MARK: 메뉴
 
   private func render() {
+    let loginStatus = SMAppService.mainApp.status
+    if lastLoginStatus != loginStatus {
+      lastLoginStatus = loginStatus
+      Task { @MainActor in self.onboarding.refresh(node: self.node) }
+    }
     let connected = Provider.allCases.filter(HookConnections.isConnected)
     // 글자 하나짜리 아이콘은 다른 상태 아이콘 사이에서 안 보인다. 받은편지함 모양으로 두고, 대기 수만 글자로 붙인다.
     let symbol = node == nil || startupError != nil ? "exclamationmark.triangle" : !daemonUp ? "tray" : pending.isEmpty ? (connected.isEmpty ? "tray" : "tray.full") : "tray.and.arrow.down.fill"
@@ -253,8 +259,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(action("도움말 (README)", #selector(openHelp)))
     menu.addItem(disabled("아이콘이 숨겨져도 \(GlobalHotkey.label)로 이 메뉴가 뜹니다"))
     menu.addItem(.separator())
-    let login = action("로그인 시 시작", #selector(toggleLoginItem))
-    login.state = SMAppService.mainApp.status == .enabled ? .on : .off
+    let login = action(loginStatus == .requiresApproval ? "로그인 시 시작 승인 필요…" : "로그인 시 시작", #selector(toggleLoginItem))
+    login.state = loginStatus == .enabled ? .on : loginStatus == .requiresApproval ? .mixed : .off
     menu.addItem(login)
     menu.addItem(action("기록 폴더 열기", #selector(openHome)))
     menu.addItem(withTitle: "종료", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
@@ -394,8 +400,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   @objc private func openHome() { NSWorkspace.shared.open(Runtime.home) }
 
   @objc private func toggleLoginItem() {
+    if SMAppService.mainApp.status == .requiresApproval {
+      SMAppService.openSystemSettingsLoginItems()
+      return
+    }
     do {
       if SMAppService.mainApp.status == .enabled { try SMAppService.mainApp.unregister() } else { try SMAppService.mainApp.register() }
+      switch SMAppService.mainApp.status {
+      case .enabled: notice = "로그인 시 시작이 켜졌습니다"
+      case .notRegistered: notice = "로그인 시 시작이 꺼졌습니다"
+      case .requiresApproval: notice = "로그인 시 시작에 macOS 승인이 필요합니다. ‘로그인 항목 설정 열기’를 눌러 Approve Here를 허용해 주세요."
+      case .notFound: notice = "macOS가 앱의 로그인 항목을 찾지 못했습니다. 설치된 앱을 다시 열고 시도해 주세요."
+      @unknown default: notice = "로그인 시 시작 상태를 확인하지 못했습니다. 시스템 설정의 로그인 항목을 확인해 주세요."
+      }
     } catch {
       notice = "로그인 시 시작 설정 실패: \(error.localizedDescription)"
     }
