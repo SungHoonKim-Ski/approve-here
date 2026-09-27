@@ -23,7 +23,7 @@ async function until(read, predicate = Boolean) {
   assert.fail('Timed out');
 }
 
-async function boot(t, config = {}, approvalsReviewer = 'user') {
+async function boot(t, config = {}, approvalsReviewer = 'user', unresumable = false) {
   const home = mkdtempSync(join(tmpdir(), 'codex-inbox-'));
   const socketPath = join(home, 'codex.sock');
   const server = createServer();
@@ -37,8 +37,9 @@ async function boot(t, config = {}, approvalsReviewer = 'user') {
     socket.on('message', data => {
       const message = JSON.parse(data.toString());
       if (message.method === 'initialize') send({ id: message.id, result: { userAgent: 'codex-app/0.157.1' } });
-      else if (message.method === 'thread/loaded/list') send({ id: message.id, result: { data: ['app-thread', 'cli-thread'], nextCursor: null } });
+      else if (message.method === 'thread/loaded/list') send({ id: message.id, result: { data: [...(unresumable ? ['no-rollout'] : []), 'app-thread', 'cli-thread'], nextCursor: null } });
       else if (message.method === 'thread/resume') {
+        if (message.params.threadId === 'no-rollout') { send({ id: message.id, error: { code: -32603, message: 'no rollout found for thread id no-rollout' } }); return; }
         resumed.push(message.params);
         send({ id: message.id, result: { approvalsReviewer, thread: { id: message.params.threadId, cwd: '/tmp/project', preview: '프로젝트 작업' } } });
         for (const request of nativeRequests.values()) if (request.params.threadId === message.params.threadId) send(request);
@@ -210,4 +211,29 @@ test('나 대신 승인 세션의 MCP 권한 훅은 카드 대기 없이 Codex �
   assert.equal((await b.pending()).length, 0);
   b.send({ method: 'thread/settings/updated', params: { threadId: 'app-thread', threadSettings: { approvalsReviewer: 'user' } } });
   await until(() => b.api('/codex?sessionId=app-thread'), r => r.body.approvalsReviewer === 'user');
+});
+
+test('공유 서버에 없는 Codex 앱 세션도 실제 턴의 나 대신 승인 설정을 따르며 카드로 묻지 않는다', async t => {
+  const b = await boot(t, { handoffSeconds: 1, waitSeconds: 1 });
+  assert.equal((await b.api('/codex?sessionId=desktop-thread')).body.bridged, false);
+  const transcript = join(b.home, 'desktop.jsonl');
+  writeFileSync(transcript, JSON.stringify({ type: 'turn_context', payload: { turn_id: 'desktop-turn', approvals_reviewer: 'auto_review' } }) + '\n');
+  const output = await new Promise(resolve => {
+    const child = spawn(process.execPath, [new URL('../hook/permission-hook.mjs', import.meta.url).pathname, '--provider', 'codex'], { env: { ...process.env, APPROVE_HERE_HOME: b.home, TMUX_PANE: '' } });
+    let stdout = ''; child.stdout.on('data', d => stdout += d);
+    child.on('close', code => resolve({ code, stdout }));
+    child.stdin.end(JSON.stringify({ session_id: 'desktop-thread', turn_id: 'desktop-turn', transcript_path: transcript, permission_mode: 'default', hook_event_name: 'PermissionRequest', tool_name: 'Bash', tool_input: { command: 'node status.mjs' } }));
+  });
+  assert.deepEqual(output, { code: 0, stdout: '' });
+  assert.equal((await b.pending()).length, 0);
+  assert.deepEqual((await b.api('/requests?status=recent')).body, []);
+});
+
+test('아직 기록이 없는 한 세션의 추가 연결 실패가 다른 Codex 세션을 끊지 않는다', async t => {
+  const b = await boot(t, {}, 'user', true);
+  assert.equal((await b.api('/health')).body.codexAppServer.connected, true);
+  b.request(approval(1));
+  const [card] = await until(b.pending, r => r.length === 1);
+  assert.equal((await b.decide(card.id, { behavior: 'allow' })).code, 200);
+  assert.equal(b.sockets.length, 1, '세션별 오류 때문에 서버 전체에 재접속하지 않는다');
 });

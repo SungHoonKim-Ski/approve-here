@@ -166,7 +166,7 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
         ws.on('close', disconnected);
         ws.on('error', error => { status.error = error.message; });
         await new Promise((resolve, reject) => { ws.once('open', resolve); ws.once('error', reject); });
-        await call('initialize', { clientInfo: { name: 'approve_here', title: 'Approve Here', version: '0.3.0' }, capabilities: { experimentalApi: true } });
+        await call('initialize', { clientInfo: { name: 'approve_here', title: 'Approve Here', version: '0.4.0' }, capabilities: { experimentalApi: true } });
         await send({ method: 'initialized' });
         status.connected = true; status.error = null;
       }
@@ -175,7 +175,14 @@ export function startCodexBridge({ home, store, surfaceActive, userHome = homedi
       do {
         const page = await call('thread/loaded/list', { ...(cursor ? { cursor } : {}) });
         for (const threadId of page.data) if (!subscribed.has(threadId)) {
-          const result = await call('thread/resume', { threadId, excludeTurns: true });
+          let result;
+          try { result = await call('thread/resume', { threadId, excludeTurns: true }); }
+          catch (error) {
+            // New/ephemeral threads may not have a rollout yet. One such thread must not disconnect everyone.
+            if (!status.connected || ws?.readyState !== WebSocket.OPEN) throw error;
+            status.error = error.message;
+            continue;
+          }
           threads.set(threadId, result.thread);
           reviewers.set(threadId, result.approvalsReviewer);
           subscribed.add(threadId);
