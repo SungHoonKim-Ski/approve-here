@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { sessionContext } from '../core/transcript.mjs';
+import { sessionContext, codexApprovalsReviewer } from '../core/transcript.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'inbox-transcript-'));
 const line = obj => JSON.stringify(obj) + '\n';
@@ -63,4 +63,23 @@ test('없는 파일·깨진 줄은 null 또는 건너뛰기', () => {
   const path = join(dir, 'broken.jsonl');
   writeFileSync(path, 'not json\n' + line({ type: 'user', message: { content: '멀쩡한 줄' } }) + '{broken');
   assert.deepEqual(sessionContext(path), { task: '멀쩡한 줄', latest: '멀쩡한 줄', assistant: null });
+});
+
+test('Codex 자동 검토는 현재 turn_context에서 읽으며 사용자 메시지나 이전 턴을 믿지 않는다', () => {
+  const path = join(dir, 'reviewer.jsonl');
+  writeFileSync(path, line({ type: 'turn_context', payload: { turn_id: 'current', approvals_reviewer: 'auto_review' } }));
+  assert.equal(codexApprovalsReviewer(path, 'current'), 'auto_review');
+  assert.equal(codexApprovalsReviewer(path, 'other'), null);
+  writeFileSync(path, line({ type: 'turn_context', payload: { turn_id: 'old', approvals_reviewer: 'auto_review' } }) + line({ type: 'turn_context', payload: { turn_id: 'current', approvals_reviewer: 'user' } }));
+  assert.equal(codexApprovalsReviewer(path, 'current'), 'user');
+  writeFileSync(path, line({ type: 'response_item', payload: { turn_id: 'current', approvals_reviewer: 'auto_review' } }));
+  assert.equal(codexApprovalsReviewer(path, 'current'), null);
+});
+
+test('큰 턴 출력 뒤에서도 승인 검토자를 찾고 깨진 기록은 결정 근거로 사용하지 않는다', () => {
+  const path = join(dir, 'reviewer-big.jsonl');
+  writeFileSync(path, line({ type: 'turn_context', payload: { turn_id: 'current', approvals_reviewer: 'auto_review' } }) + line({ type: 'event_msg', payload: { text: 'x'.repeat(700000) } }));
+  assert.equal(codexApprovalsReviewer(path, 'current'), 'auto_review');
+  assert.equal(codexApprovalsReviewer('/missing', 'current'), null);
+  assert.equal(codexApprovalsReviewer(path, null), null);
 });

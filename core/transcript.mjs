@@ -4,6 +4,29 @@ const HEAD_BYTES = 64 * 1024;
 const TAIL_BYTES = 512 * 1024;
 const MAX_CHARS = 200;
 
+/** Codex의 실제 턴 설정만 읽는다. 사용자 메시지·설정 파일의 기본값은 승인 모드의 근거로 쓰지 않는다. */
+export function codexApprovalsReviewer(transcriptPath, turnId) {
+  if (!transcriptPath || !turnId) return null;
+  try {
+    const size = statSync(transcriptPath).size;
+    for (let bytes = TAIL_BYTES; bytes <= 16 * 1024 * 1024; bytes *= 2) {
+      const start = Math.max(0, size - bytes);
+      const lines = readSlice(transcriptPath, start, size).split('\n');
+      if (start > 0) lines.shift();
+      for (let i = lines.length - 1; i >= 0; i--) {
+        let record;
+        try { record = JSON.parse(lines[i]); } catch { continue; }
+        if (record.type !== 'turn_context') continue;
+        if (record.payload?.turn_id !== turnId) return null;
+        const reviewer = record.payload.approvals_reviewer;
+        return ['user', 'auto_review', 'guardian_subagent'].includes(reviewer) ? reviewer : null;
+      }
+      if (start === 0) break;
+    }
+  } catch {}
+  return null;
+}
+
 /**
  * 훅 입력의 transcript_path에서 "이 세션이 무슨 일을 하고 있나"를 뽑는다.
  * 첫 사용자 요청(task)과 마지막 사용자 요청(latest)만 본다 — 카드에서 어느 세션인지 알아보는 데는 그걸로 충분하다.
