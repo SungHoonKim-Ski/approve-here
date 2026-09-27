@@ -18,6 +18,8 @@ cp -R "$ROOT/surfaces/tui" "$ROOT/surfaces/web" "$APP/Contents/Resources/core/su
 cp "$ROOT/package.json" "$APP/Contents/Resources/core/"
 # WebSocket transport for the local Codex App Server.
 cp -R "$ROOT/node_modules" "$APP/Contents/Resources/core/"
+# 사용자 Mac에는 Swift 컴파일러가 없어도 된다. 실행기는 빌드할 때 만들고 설치 시 경로 설정만 쓴다.
+swiftc -O -target "$(uname -m)-apple-macosx13.0" "$ROOT/core/codex-launcher.swift" -o "$APP/Contents/Resources/core/core/codex-launcher-template"
 # 앱 아이콘(icon/make-icon.swift로 만든 icns)
 [ -f icon/AppIcon.icns ] || { swift icon/make-icon.swift icon/AppIcon.iconset >/dev/null && iconutil -c icns icon/AppIcon.iconset -o icon/AppIcon.icns; }
 cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
@@ -41,6 +43,10 @@ PLIST
 # ad-hoc 서명: 알림 권한 대화상자가 번들 신원을 요구한다. 배포 서명·공증이 아니라 처음 열 때 Gatekeeper가 한 번 막는다(README "처음 열기").
 codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 ditto -c -k --keepParent "$APP" dist/ApproveHere.app.zip
+if [ "${APPROVE_HERE_SKIP_DMG:-0}" = 1 ]; then
+  echo "built app and zip: $PWD/$APP ($VERSION)"
+  exit 0
+fi
 # dmg: 앱 + Applications 링크 + "설치 안내.html". 창 배경에 끌어 넣기 그림과 막혔을 때 누를 곳을 그려 넣는다(dmg/make-background.swift).
 STAGE=dist/dmg-stage
 rm -rf "$STAGE" dist/rw.dmg && mkdir -p "$STAGE/.background"

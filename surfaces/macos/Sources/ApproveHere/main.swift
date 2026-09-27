@@ -323,7 +323,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     notice = "Codex 실행기를 설치하고 있습니다…"
     Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: true, node: self.node) }
     work.async { [weak self] in
-      let (code, output) = Runtime.run(node, [Runtime.cliScript.path, "install-codex-launcher"], env: ["APPROVE_HERE_HOME": Runtime.home.path], timeout: 120)
+      let (code, output) = Runtime.run(node, [Runtime.cliScript.path, "install-codex-launcher", "--prebuilt"], env: ["APPROVE_HERE_HOME": Runtime.home.path], timeout: 120)
       DispatchQueue.main.async {
         guard let self else { return }
         self.installingLauncher = false
