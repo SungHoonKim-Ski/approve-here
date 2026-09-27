@@ -13,6 +13,7 @@
 import { inboxHome, loadConfig, readToken, readAllowlist } from '../core/config.mjs';
 import { allowlistDecision, runPolicyHooks } from '../core/policy.mjs';
 import { sessionContext, codexApprovalsReviewer } from '../core/transcript.mjs';
+import { codexRelayOwnsSession } from '../core/codex-relay-owner.mjs';
 
 const CONNECT_TIMEOUT_MS = 2000;
 const POLL_SECONDS = 25;
@@ -28,6 +29,8 @@ async function main() {
   const provider = argument('--provider') || detectProvider(input);
   const reviewer = provider === 'codex' ? codexApprovalsReviewer(input.transcript_path, input.turn_id) : null;
   if (input.hook_event_name === 'PermissionRequest' && ['auto_review', 'guardian_subagent'].includes(reviewer)) return;
+  // The relay preserves Codex's own prompt and mirrors its native server request after this hook.
+  if (provider === 'codex' && input.hook_event_name === 'PermissionRequest' && config.codexAppServer !== false && process.env.APPROVE_HERE_CODEX_RELAY === '1' && await codexRelayOwnsSession(process.env.APPROVE_HERE_CODEX_RELAY_SOCKET, input.session_id)) return;
   const question = input.hook_event_name === 'PreToolUse' && input.tool_name === 'AskUserQuestion';
   if (input.hook_event_name === 'PreToolUse' && !question) return; // 다른 PreToolUse는 우리 일이 아니다
   if (input.hook_event_name === 'PostToolUse') {
