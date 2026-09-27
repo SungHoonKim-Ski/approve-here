@@ -11,24 +11,28 @@ export function hookCommand(provider, hookPath = HOOK_PATH) {
 
 /**
  * provider별로 우리 훅이 서는 이벤트. 훅 하나가 stdin의 hook_event_name으로 둘을 가른다.
- * Claude는 AskUserQuestion도 PreToolUse에서 받아 앱에서 답하게 한다. Codex에는 그 도구가 없다.
+ * Claude 질문은 PreToolUse로 받는다. Codex의 request_user_input은 로컬 App Server 연결로 받는다.
  */
 export function hookEvents(provider) {
   // PostToolUse는 "터미널에서 답했다"는 신호다 — 양쪽에 떠 있던 카드를 지운다.
   return provider === 'claude'
     ? [{ event: 'PermissionRequest' }, { event: 'PreToolUse', matcher: 'AskUserQuestion' }, { event: 'PostToolUse', matcher: 'AskUserQuestion' }]
-    : [{ event: 'PermissionRequest' }, { event: 'PostToolUse', matcher: 'Bash' }];
+    : [{ event: 'PermissionRequest' }, { event: 'PostToolUse' }];
 }
 
 /**
  * Claude Code(~/.claude/settings.json)와 Codex(~/.codex/hooks.json)에 훅을 등록한다.
  * 두 CLI의 hooks 설정 모양이 같아 한 함수로 처리한다. 이미 있는 다른 훅은 그대로 두고, 우리 항목은 이벤트마다 하나만 유지한다.
  */
-export function install({ claude = false, codex = false, home, userHome = homedir(), hookPath = HOOK_PATH, log = console.log } = {}) {
+export function codexHooksPath(userHome = homedir(), codexHome = process.env.CODEX_HOME) {
+  return join(codexHome || join(userHome, '.codex'), 'hooks.json');
+}
+
+export function install({ claude = false, codex = false, home, userHome = homedir(), codexHome = process.env.CODEX_HOME, hookPath = HOOK_PATH, log = console.log } = {}) {
   if (!claude && !codex) throw new Error('--claude, --codex 중 하나 이상을 지정하세요.');
   const results = [];
   if (claude) results.push(installInto(join(userHome, '.claude', 'settings.json'), 'claude', hookPath));
-  if (codex) results.push(installInto(join(userHome, '.codex', 'hooks.json'), 'codex', hookPath));
+  if (codex) results.push(installInto(codexHooksPath(userHome, codexHome), 'codex', hookPath));
   for (const r of results) log(`${r.changed ? '등록' : '이미 등록됨'}: ${r.path}`);
   if (codex)
     log(

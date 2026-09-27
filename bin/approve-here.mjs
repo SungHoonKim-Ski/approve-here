@@ -16,6 +16,7 @@ const commands = {
     daemon = await startDaemon({
       home,
       port,
+      codexBridge: true,
       onIdle: () => {
         console.log('표면도 대기 요청도 없어 데몬을 닫습니다.');
         stop();
@@ -40,6 +41,7 @@ const commands = {
   async status() {
     const health = await daemonHealth(inboxHome());
     console.log(health ? `실행 중 · 포트 ${health.port} · 대기 ${health.pending}건 · 표면 ${health.surfaceActive ? '있음' : '없음'}` : '데몬이 실행 중이 아닙니다. 표면(tui·app·open)을 열면 같이 뜹니다.');
+    if (health?.codexAppServer) console.log(health.codexAppServer.connected ? 'Codex 앱·CLI 서버 연결됨' : `Codex 앱·CLI 서버 연결 대기${health.codexAppServer.error ? `: ${health.codexAppServer.error}` : ''}`);
   },
   async pending() {
     const list = await api('/requests?status=pending');
@@ -73,12 +75,12 @@ const commands = {
   install: async () =>
     (await import('../core/install.mjs')).install({ claude: rest.includes('--claude'), codex: rest.includes('--codex'), home: inboxHome() }),
   async uninstall() {
-    const { uninstallFrom } = await import('../core/install.mjs');
+    const { uninstallFrom, codexHooksPath } = await import('../core/install.mjs');
     const { homedir } = await import('node:os');
     const { join } = await import('node:path');
     const targets = [];
     if (rest.includes('--claude')) targets.push(join(homedir(), '.claude', 'settings.json'));
-    if (rest.includes('--codex')) targets.push(join(homedir(), '.codex', 'hooks.json'));
+    if (rest.includes('--codex')) targets.push(codexHooksPath());
     if (!targets.length) throw new Error('--claude, --codex 중 하나 이상을 지정하세요.');
     for (const path of targets) {
       const result = uninstallFrom(path);

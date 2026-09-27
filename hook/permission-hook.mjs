@@ -45,6 +45,15 @@ async function main() {
   }
 
   const request = question ? toQuestionRequest(input, provider) : toRequest(input, provider);
+  // The shared App Server can deliver decisions to both Codex app and CLI without tmux.
+  // Let it emit the approval request instead of registering a second hook card.
+  if (provider === 'codex' && input.hook_event_name === 'PermissionRequest') {
+    const client = apiClient(home, config);
+    const state = client ? await client.get(`/codex?sessionId=${encodeURIComponent(input.session_id || '')}`) : null;
+    // Do not hold the hook open before Codex's own automatic reviewer can run.
+    if (['auto_review', 'guardian_subagent'].includes(state?.approvalsReviewer)) return;
+    if (state?.bridged && ['Bash', 'apply_patch'].includes(input.tool_name)) return;
+  }
   if (question && !request.context?.assistant) {
     // transcript는 비동기로 쓰여서 질문 직전 설명이 아직 없을 수 있다. 잠깐 기다려 다시 읽는다(최대 1.5초).
     for (let i = 0; i < 3 && !request.context?.assistant; i++) {

@@ -12,6 +12,8 @@ export const DEFAULTS = Object.freeze({
   handoffSeconds: 20,
   // tmux 안의 세션이면 질문·Codex 승인을 터미널과 카드 양쏙에 띄우고 먼저 답한 쪽이 이긴다(카드 결정은 tmux 키로 전달).
   mirror: true,
+  // Codex app·공유 App Server CLI의 승인과 질문을 로컬 소켓으로 전달한다(tmux 불필요).
+  codexAppServer: true,
   // 사용자 정책 훅 하나에 허용하는 실행 시간(초).
   policyTimeoutSeconds: 60,
   // provider별 사용자 정책 훅 명령. 훅 프로세스 안에서 순서대로 실행하고 첫 결정을 따른다.
