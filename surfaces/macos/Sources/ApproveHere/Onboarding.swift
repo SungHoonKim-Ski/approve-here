@@ -102,7 +102,7 @@ struct OnboardingView: View {
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
-            Text("Codex 앱·CLI에서 훅을 검토·신뢰해 주세요. tmux 없이도 승인·질문에 답할 수 있습니다.").font(.caption).foregroundStyle(.secondary)
+            Text("Codex에서 훅을 검토·신뢰해 주세요. 앱 질문은 메뉴에서 중계 실행기를 설치하고 Codex를 종료한 뒤 그 실행기로 열면 연결됩니다.").font(.caption).foregroundStyle(.secondary)
           }
         }
         step(2, "로그인할 때 자동으로 켜지게") {
