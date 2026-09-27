@@ -154,6 +154,23 @@ test('공백·따옴표가 있는 앱 경로에서도 실행기는 별도 앱을
   assert.throws(() => installCodexLauncher({ appPath: app, target: join(root, 'x/../ChatGPT.app'), inspectExecutable: () => 'ChatGPT' }), /별도/);
 });
 
+test('앱 도구가 부모 환경을 지워도 설치된 shim은 원래 Codex 실행 파일을 실행한다', () => {
+  const root = mkdtempSync(join(tmpdir(), "launcher env '한글 "));
+  const app = join(root, 'ChatGPT.app');
+  mkdirSync(join(app, 'Contents/MacOS'), { recursive: true });
+  mkdirSync(join(app, 'Contents/Resources'), { recursive: true });
+  writeFileSync(join(app, 'Contents/MacOS/ChatGPT'), 'original');
+  const cli = join(app, 'Contents/Resources/codex');
+  writeFileSync(cli, '#!/bin/sh\n[ "$1" = "--version" ] && printf "isolated-cli-version\\n"\n');
+  chmodSync(cli, 0o755);
+  const target = join(root, 'Codex with Approve Here.app');
+  installCodexLauncher({ appPath: app, target, inspectExecutable: () => 'ChatGPT' });
+  const result = execFileSync(join(target, 'Contents/MacOS/codex-shim'), ['--version'], {
+    env: { PATH: process.env.PATH }, encoding: 'utf8',
+  });
+  assert.equal(result.trim(), 'isolated-cli-version');
+});
+
 test('잘못된 observer JSON은 그 연결만 닫으며 원래 앱과 카드 연결을 유지한다', async t => {
   const b = await boot(t);
   const observer = new WebSocket('ws://localhost/', { createConnection: () => connect(b.relay.socketPath) });
