@@ -21,7 +21,7 @@ test('ensureDaemon: 데몬이 없으면 분리 실행으로 띄우고 health가 
   assert.equal(second.port, first.port);
 });
 
-test('stopDaemon: daemon.json의 pid를 종료하고 health가 끊긴다', async () => {
+test('stopDaemon: 인증된 종료 요청으로 데몬을 내리고 health가 끊긴다', async () => {
   const home = mkdtempSync(join(tmpdir(), 'inbox-home-'));
   writeFileSync(join(home, 'config.json'), JSON.stringify({ port: 0 }));
   await ensureDaemon({ home, port: 0 });
