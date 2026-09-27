@@ -67,3 +67,19 @@ test('대기 중인 훅에도 실제 결정과 이력 기록 실패를 일관되
   assert.deepEqual(observed.decision, { behavior: 'deny' });
   assert.equal(observed.historyError, receipt.historyError);
 });
+
+for (const [decision, status] of [[{ answers: { selection: '확인' } }, 'answered'], [{ passthrough: true }, 'passed']]) {
+  test(`질문의 ${status} 결과도 이력 기록 실패와 구분한다`, async t => {
+    if (process.getuid?.() === 0) return t.skip('권한 거부 검증은 일반 사용자로 실행한다');
+    const { path, api } = await boot(t);
+    const created = await (await api('/requests', { ...sample, provider: 'claude', toolName: 'AskUserQuestion', kind: 'question', questions: [{ id: 'selection', question: '검증 질문' }] })).json();
+    chmodSync(path, 0o444);
+    const response = await api(`/requests/${created.id}/decision`, decision);
+    assert.equal(response.status, 200);
+    const receipt = await response.json();
+    assert.equal(receipt.status, status);
+    assert.deepEqual(receipt.decision, decision);
+    assert.match(receipt.historyError, /답변.*전달.*이력.*저장하지 못/);
+    assert.deepEqual(await (await api('/requests')).json(), []);
+  });
+}
