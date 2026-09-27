@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var daemonUp = false
   private var codexStatus: CodexConnectionStatus?
   private var notice: String?
+  private var installingLauncher = false
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
   private var hotkey: GlobalHotkey?
@@ -49,7 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     onboarding = OnboardingPanel(actions: .init(
       connect: { [weak self] provider in self?.connect(provider) },
       toggleLogin: { [weak self] in self?.toggleLoginItem() },
-      demoCard: { [weak self] in self?.cards.showDemo() }
+      demoCard: { [weak self] in self?.cards.showDemo() },
+      retryNode: { [weak self] in self?.retryNode() },
+      installCodexLauncher: { [weak self] in self?.installCodexLauncher() },
+      revealCodexLauncher: { NSWorkspace.shared.activateFileViewerSelecting([Runtime.codexLauncher]) }
     ))
     if Bundle.main.bundleIdentifier != nil { setupNotifications() }
     Runtime.log("launch bundle=\(Bundle.main.bundlePath) core=\(Runtime.coreBundled)")
@@ -81,9 +85,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       }
       // 앱을 옮겼거나 node가 바뀌었거나 이벤트가 늘었으면 등록된 훅을 조용히 맞춘다.
       for provider in Provider.allCases where !self.yieldsToInstalled && HookConnections.isStale(provider, node: found) {
-        try? HookConnections.connect(provider, node: found)
-        DispatchQueue.main.async {
-          self.notice = "\(provider.title) 훅을 갱신했습니다" + (provider == .codex ? " — Codex가 다음 실행에서 훅 신뢰를 다시 물어요" : "")
+        do {
+          try HookConnections.connect(provider, node: found)
+          DispatchQueue.main.async {
+            self.notice = "\(provider.title) 훅을 갱신했습니다" + (provider == .codex ? " — Codex가 다음 실행에서 훅 신뢰를 다시 물어요" : "")
+          }
+        } catch {
+          Runtime.log("hook refresh failed: \(error)")
+          DispatchQueue.main.async {
+            self.notice = "\(provider.title) 연결을 갱신하지 못했습니다: \(error.localizedDescription)"
+            self.onboarding.update(message: self.notice, node: self.node)
+            self.onboarding.show(node: self.node)
+          }
         }
       }
       Runtime.ensureDaemon(node: found)
@@ -158,10 +171,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         menu.addItem(entry)
       }
       if connected.contains(.codex) {
-        let state = disabled(codexStatus?.connected == true ? "   Codex 앱·CLI 준비됨" : "   Codex 앱·CLI 연결 대기")
-        state.toolTip = codexStatus?.error
+        let state = disabled(codexStatus?.sharedConnected == true ? "   Codex CLI 질문 연결됨" : "   Codex CLI 질문 연결 대기")
+        state.toolTip = codexStatus?.sharedError ?? codexStatus?.error
         menu.addItem(state)
-        menu.addItem(disabled("   앱 중계 \(codexStatus?.relayCount ?? 0)개 연결됨"))
+        let appConnections = codexStatus?.relayCount ?? 0
+        menu.addItem(disabled(appConnections > 0 ? "   Codex 앱 연결됨 (\(appConnections)개)" : "   Codex 앱은 실행기로 열어 연결하세요"))
         menu.addItem(action("Codex 앱 중계 실행기 설치…", #selector(installCodexLauncher)))
       }
     }
@@ -271,14 +285,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     do {
       try HookConnections.connect(provider, node: node)
-      notice = provider == .codex ? "Codex 앱·CLI 연결됨 — Codex에서 훅을 검토·신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
+      notice = provider == .codex ? "Codex 훅 등록됨 — Codex를 다시 시작하고 훅을 검토·신뢰해 주세요" : "Claude Code 훅 등록됨 — 새 세션부터 승인·질문이 여기로 옵니다"
       ensureDaemonIfNeeded()
     } catch {
       notice = "설정 파일을 쓰지 못했습니다: \(error.localizedDescription)"
       Runtime.log("connection error \(error)")
     }
     render()
-    Task { @MainActor in self.onboarding.refresh(node: self.node) }
+    Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: self.installingLauncher, node: self.node) }
   }
 
   private func disconnect(_ provider: Provider) {
@@ -294,19 +308,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       notice = "설정 파일을 쓰지 못했습니다: \(error.localizedDescription)"
     }
     render()
-    Task { @MainActor in self.onboarding.refresh(node: self.node) }
+    Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: self.installingLauncher, node: self.node) }
   }
 
   @objc private func retryNode() { bootstrap() }
   @objc private func openNodeDownload() { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }
 
   @objc private func installCodexLauncher() {
-    guard let node else { return }
+    guard let node, !installingLauncher else { return }
+    installingLauncher = true
+    notice = "Codex 실행기를 설치하고 있습니다…"
+    Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: true, node: self.node) }
     work.async { [weak self] in
       let (code, output) = Runtime.run(node, [Runtime.cliScript.path, "install-codex-launcher"], env: ["APPROVE_HERE_HOME": Runtime.home.path], timeout: 120)
       DispatchQueue.main.async {
-        self?.notice = code == 0 ? "중계 실행기 설치됨 — Codex를 종료한 뒤 ~/Applications에서 여세요" : output
-        self?.render()
+        guard let self else { return }
+        self.installingLauncher = false
+        self.notice = code == 0 ? "실행기 설치 완료. Codex를 완전히 종료한 뒤 ‘설치된 실행기 보기’를 눌러 실행하세요." : "실행기를 설치하지 못했습니다: \(output.trimmingCharacters(in: .whitespacesAndNewlines))"
+        self.render()
+        self.onboarding.update(message: self.notice, node: self.node)
       }
     }
   }
@@ -319,7 +339,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       notice = "로그인 시 시작 설정 실패: \(error.localizedDescription)"
     }
     render()
-    Task { @MainActor in self.onboarding.refresh(node: self.node) }
+    Task { @MainActor in self.onboarding.update(message: self.notice, installingLauncher: self.installingLauncher, node: self.node) }
   }
 
   @objc private func showOnboarding() { Task { @MainActor in self.onboarding.show(node: self.node) } }
@@ -352,23 +372,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   private func decide(_ id: String?, _ behavior: String, _ remember: String?) {
     guard let id else { return }
-    Task { @MainActor in
-      try? await client.decide(id, behavior: behavior, remember: remember)
-      poll()
+    submit(id) { [self] in
+      try await client.decide(id, behavior: behavior, remember: remember)
     }
   }
 
   private func answer(_ id: String, _ answers: [String: String]) {
-    Task { @MainActor in
-      try? await client.answer(id, answers: answers)
-      poll()
+    submit(id) { [self] in
+      try await client.answer(id, answers: answers)
     }
   }
 
   private func passthrough(_ id: String?) {
     guard let id else { return }
+    submit(id) { [self] in
+      try await client.passthrough(id)
+    }
+  }
+
+  private func submit(_ id: String, operation: @escaping () async throws -> Void) {
     Task { @MainActor in
-      try? await client.passthrough(id)
+      guard cards.beginSubmission(id) else { return }
+      do {
+        try await operation()
+        cards.finishSubmission(id)
+        notice = "답변을 전달했습니다"
+      } catch {
+        let message = (error as? InboxError)?.errorDescription
+          ?? "답변이 전달됐는지 확인하지 못했습니다. 원래 화면에서 요청 상태를 확인해 주세요."
+        cards.finishSubmission(id, error: message)
+        notice = message
+        Runtime.log("answer failed id=\(id): \(error)")
+        render()
+      }
       poll()
     }
   }
@@ -400,12 +436,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
     guard let id = response.notification.request.content.userInfo["id"] as? String else { return }
-    switch response.actionIdentifier {
-    case "allow": try? await client.decide(id, behavior: "allow")
-    case "deny": try? await client.decide(id, behavior: "deny")
-    default: break
+    await MainActor.run {
+      switch response.actionIdentifier {
+      case "allow": decide(id, "allow", nil)
+      case "deny": decide(id, "deny", nil)
+      default: poll()
+      }
     }
-    await MainActor.run { poll() }
   }
 
   func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {

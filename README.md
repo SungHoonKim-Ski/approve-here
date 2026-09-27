@@ -12,7 +12,7 @@
 
 1. [Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 **ApproveHere.dmg**를 내려받아 열고, 앱을 Applications로 끌어 넣습니다.
 2. 앱을 엽니다. Apple 서명·공증이 없어 처음 한 번은 "Apple이 확인할 수 없습니다"로 막힙니다. **완료**를 누르고 시스템 설정 → 개인정보 보호 및 보안 → 맨 아래 **그래도 열기** → 열기 → 암호. dmg 창의 "설치 안내"를 열면 그 화면으로 바로 가는 버튼과 화면 사진이 있습니다. macOS 15부터 우클릭 → 열기는 통하지 않습니다.
-3. 메뉴바의 아이콘을 눌러 **Claude Code 연결**, **Codex 연결**을 켭니다. 쓰는 것만 켜도 됩니다.
+3. 처음 뜨는 **시작 안내**에서 **Claude Code 연결**, **Codex 연결**을 켭니다. 쓰는 것만 켜도 됩니다. 연결 버튼은 훅 등록 상태이며 실제 세션 연결 상태는 메뉴에서 확인합니다.
 4. Codex 앱(ChatGPT 앱 안의 Codex)의 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 아래 [Codex 앱 연결](#codex-앱-연결)을 따라 중계 실행기로 앱을 엽니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다.
 5. 승인·질문이 생기면 화면 오른쪽 위에 카드가 뜹니다.
 
@@ -63,10 +63,10 @@ Codex 앱은 열릴 때 자기 안에 든 Codex 실행 파일을 띄우고, 그 
 
 ### 설치와 사용
 
-1. 메뉴바 아이콘 → **Codex 앱 중계 실행기 설치…**를 누릅니다. `~/Applications/Codex with Approve Here.app`이 생깁니다. 원래 앱은 그 자리에 그대로 있습니다. 터미널이 편하면 `approve-here install-codex-launcher`도 같은 일을 합니다.
+1. **시작 안내**에서 Codex를 연결하고 **Codex 앱 실행기 설치**를 누릅니다. 메뉴바 아이콘 → **Codex 앱 중계 실행기 설치…**로도 설치할 수 있습니다. `~/Applications/Codex with Approve Here.app`이 생깁니다. 원래 앱은 그 자리에 그대로 있습니다. 터미널이 편하면 `approve-here install-codex-launcher`도 같은 일을 합니다.
 2. Codex 앱을 완전히 종료합니다(⌘Q). 창만 닫으면 프로세스가 남아 있어 다음 단계에서 "완전히 종료한 뒤 여세요"라고 막힙니다.
-3. **Codex with Approve Here**를 엽니다. Finder에서 홈 폴더 → Applications, 또는 Spotlight에서 "Codex with"를 칩니다. 자주 쓰면 Dock에 끌어다 놓으세요.
-4. 메뉴바 아이콘을 눌러 **앱 중계 1개 연결됨**을 확인합니다. 터미널에서는 `approve-here status`가 같은 것을 보여 줍니다.
+3. 시작 안내의 **설치된 실행기 보기**를 누르고 **Codex with Approve Here**를 엽니다. Finder에서 홈 폴더 → Applications, 또는 Spotlight에서 "Codex with"를 찾아도 됩니다. 자주 쓰면 Dock에 끌어다 놓으세요.
+4. 메뉴바 아이콘을 눌러 **Codex 앱 연결됨 (1개)**를 확인합니다. **Codex CLI 질문 연결됨**은 별도의 CLI 연결 상태입니다. 터미널에서는 `approve-here status`가 각각의 연결 상태를 보여 줍니다.
 
 이후로 Codex는 이 실행기로 엽니다. 원래 앱 아이콘으로 열면 예전 방식으로 돌아갑니다. 그래도 승인 훅과 "나 대신 승인" 인계는 그대로 되고, 질문만 앱 안에서 받게 됩니다. Codex를 로그인 항목에 넣어 두었다면 그 항목을 실행기로 바꿉니다(시스템 설정 → 일반 → 로그인 항목).
 
@@ -77,7 +77,7 @@ Codex 앱은 열릴 때 자기 안에 든 Codex 실행 파일을 띄우고, 그 
 | 증상 | 확인할 것 |
 |---|---|
 | "Codex 앱을 완전히 종료한 뒤 이 중계 실행기를 여세요" | 원래 앱이 아직 살아 있습니다. ⌘Q로 끄거나 활성 상태 보기에서 ChatGPT를 종료한 뒤 다시 엽니다 |
-| 메뉴에 "앱 중계 0개 연결됨" | 원래 앱 아이콘으로 열렸거나, Approve Here가 꺼진 채 Codex를 열었습니다. Codex를 종료하고 실행기로 다시 엽니다 |
+| 메뉴에 "Codex 앱은 실행기로 열어 연결하세요" | 원래 앱 아이콘으로 열렸거나, Approve Here가 꺼진 채 Codex를 열었습니다. Codex를 종료하고 실행기로 다시 엽니다 |
 | Codex 앱을 업데이트한 뒤 카드가 안 온다 | 앱 안의 실행 파일 위치가 바뀌었을 수 있습니다. 실행기를 다시 설치합니다. 앱이 `CODEX_CLI_PATH`를 더 읽지 않게 바뀌었다면 실행기로 열어도 원래 방식으로 돌 뿐 망가지지는 않습니다 |
 | 설치할 때 "Codex 앱을 찾지 못했습니다" | `/Applications/ChatGPT.app`이나 `/Applications/Codex.app`이 아닌 자리에 있으면 `approve-here install-codex-launcher --app /경로/앱.app`으로 알려 줍니다 |
 | 비밀 입력 질문이 카드에 없다 | 의도한 동작입니다. 비밀번호·토큰 같은 가려진 입력은 앱 안에서만 받습니다 |

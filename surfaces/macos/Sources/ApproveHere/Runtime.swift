@@ -12,6 +12,9 @@ enum Runtime {
   static var hookScript: URL { coreDir.appendingPathComponent("hook/permission-hook.mjs") }
   static var cliScript: URL { coreDir.appendingPathComponent("bin/approve-here.mjs") }
   static var coreBundled: Bool { FileManager.default.fileExists(atPath: hookScript.path) }
+  static var codexLauncher: URL {
+    FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Codex with Approve Here.app")
+  }
 
   private static let logURL = home.appendingPathComponent("app.log")
 
