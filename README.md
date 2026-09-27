@@ -1,10 +1,10 @@
 # Approve Here
 
-여러 Claude Code·Codex 세션이 던지는 **"허용할까요?"를 한 자리에서** 처리하는 macOS 메뉴바 앱입니다.
+여러 Claude Code·Codex 앱·CLI 세션이 던지는 **"허용할까요?"를 한 자리에서** 처리하는 macOS 메뉴바 앱입니다.
 
 > agent 세션을 서너 개 띄워 두면 어느 창이 승인을 기다리는지 모른다. 창을 돌며 찾고, 놓치면 그 작업은 멈춰 있다. 그리고 같은 종류의 승인을 매번 또 누른다.
 
-승인이 필요해지면 메뉴바 뱃지가 `⏳ 1`로 바뀌고 화면 오른쪽 위에 카드가 뜹니다. **[허용] [거부]**로 답하거나 **[창으로]**를 눌러 그 요청을 낸 tmux 창으로 갑니다. 같은 종류의 승인은 "앞으로 자동"으로 기억시킵니다. Claude가 **질문**(`AskUserQuestion`)을 하면 그 카드에 옵션 버튼이 그대로 뜨고, 고르면 Claude가 다이얼로그 없이 답을 받습니다.
+승인이 필요해지면 메뉴바 뱃지가 `⏳ 1`로 바뀌고 화면 오른쪽 위에 카드가 뜹니다. **[허용] [거부]**로 답하거나 **[창으로]**를 눌러 그 요청을 낸 tmux 창으로 갑니다. 같은 종류의 승인은 "앞으로 자동"으로 기억시킵니다. Claude Code의 **질문**(`AskUserQuestion`)과 Codex 앱·CLI의 **질문**(`request_user_input`)도 카드에서 선택하거나 직접 입력해 답할 수 있습니다. Codex 앱·CLI 연결에는 tmux가 필요하지 않습니다.
 
 ## 시작하기
 
@@ -36,7 +36,8 @@ Codex는 새 훅을 처음 만나면 **신뢰 확인**을 요구합니다. 연�
 ### 승인 요청이 뜰 상황에서만 옵니다
 
 - Claude Code가 `auto` 모드이거나 `permissions.allow`에 있는 명령은 원래 프롬프트가 없으니 여기로도 오지 않습니다. 시험해 보려면 `claude --permission-mode default`로 띄우고 allow 목록에 없는 명령(예: `touch x`)을 시키세요.
-- 카드를 놓쳐도 터미널에서 답할 수 있습니다. Claude Code 승인은 터미널 프롬프트가 함께 뜹니다. 질문과 Codex 승인은 tmux 안이면 터미널 다이얼로그도 함께 뜨고(카드에서 고르면 앱이 그 다이얼로그에 대신 입력, 터미널에서 답하면 카드가 사라짐), tmux 밖이면 20초 뒤 터미널로 넘어갑니다.
+- Codex 앱·공유 App Server CLI는 카드와 원래 화면에서 모두 답할 수 있습니다. 먼저 답한 쪽이 처리되고 다른 쪽 요청은 사라집니다. tmux는 필요하지 않습니다. 연결 조건과 확인 방법은 [Codex 연결 안내](docs/CODEX.md)를 참고하세요.
+- Claude Code 승인은 터미널 프롬프트가 함께 뜹니다. Claude Code 질문과 App Server에 연결되지 않은 Codex 승인은 tmux 안이면 원래 다이얼로그도 함께 뜨고, tmux 밖이면 20초 뒤 원래 화면으로 넘어갑니다.
 - 앱이 꺼져 있으면 아무것도 바뀌지 않습니다. 훅은 결정 없이 물러나고 CLI가 원래 프롬프트를 띄웁니다.
 
 ## 안 될 때
@@ -56,7 +57,7 @@ Codex는 새 훅을 처음 만나면 **신뢰 확인**을 요구합니다. 연�
 ## 동작
 
 ```
-Claude Code / Codex ── PermissionRequest 훅 ──▶ 앱 안의 코어
+Claude Code / Codex ── 훅 또는 Codex 로컬 App Server ──▶ 앱 안의 코어
                                                   ├─ 1. 기억시킨 규칙(allowlist)에 맞으면 바로 허용
                                                   ├─ 2. 내 정책 훅이 있으면 먼저 실행 (있을 때만)
                                                   └─ 3. 남은 것만 메뉴바·알림으로
@@ -82,7 +83,7 @@ Claude Code / Codex ── PermissionRequest 훅 ──▶ 앱 안의 코어
 
 ## 하지 않는 것
 
-- 질문 답변은 Claude Code만 됩니다(Codex에는 해당 도구가 없습니다). 옵션 없는 자유 입력 질문은 터미널로 넘깁니다. 이 경로는 Claude Code 문서에 없는 동작(2.1.283 실측)이라 버전이 바뀌면 막힐 수 있고, 그때는 원래 다이얼로그로 돌아갑니다.
+- Codex 질문 답변은 공유 로컬 App Server에 연결되는 앱·CLI에서 지원합니다. 비밀 입력 질문은 원래 Codex 화면에서 받습니다. 별도 서버를 쓰는 구버전은 [연결 조건](docs/CODEX.md)을 확인하세요. Claude Code 질문 답변은 문서에 없는 동작(2.1.283 실측)을 사용하므로 버전에 따라 원래 다이얼로그로 돌아갈 수 있습니다.
 - Apple 서명·공증이 없습니다. 첫 실행 한 번 시스템 설정에서 허용해야 하고, 그 때문에 macOS 시스템 알림은 쓰지 않습니다(카드 패널이 그 자리를 대신합니다).
 - Windows·Linux는 지원하지 않습니다.
 
@@ -90,6 +91,7 @@ Claude Code / Codex ── PermissionRequest 훅 ──▶ 앱 안의 코어
 
 ```bash
 git clone https://github.com/SungHoonKim-Ski/approve-here && cd approve-here
+npm ci                         # Node 의존성 설치
 npm test                       # Node 코어 테스트
 sh surfaces/macos/build.sh     # SwiftPM만으로 .app·zip·dmg (Xcode 불필요)
 ```

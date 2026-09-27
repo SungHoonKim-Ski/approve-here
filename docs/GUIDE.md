@@ -22,7 +22,7 @@ Applications에서 Approve Here를 엽니다. Apple 서명이 없는 앱이라 �
 
 ![시작 안내](guide/onboarding.png)
 
-1. 쓰는 CLI를 연결합니다. Claude Code, Codex 중 쓰는 것을 누르면 앱이 각 CLI의 설정 파일(`~/.claude/settings.json`, `~/.codex/hooks.json`)에 훅 한 줄을 넣습니다. 다른 설정은 건드리지 않습니다.
+1. 쓰는 에이전트를 연결합니다. Claude Code, Codex 중 쓰는 것을 누르면 앱이 각 CLI의 설정 파일(`~/.claude/settings.json`, `~/.codex/hooks.json`)에 훅 한 줄을 넣습니다. 다른 설정은 건드리지 않습니다.
 2. 로그인 시 시작을 켜 두면 Mac을 켤 때 같이 뜹니다.
 3. 카드 시험해 보기를 누르면 승인 카드가 어떻게 뜨는지 가짜 카드로 미리 볼 수 있습니다.
 
@@ -50,17 +50,19 @@ Claude Code나 Codex가 명령을 실행하기 전에 허락을 구하면 화면
 
 ![접힌 요청](guide/cards-collapsed.png)
 
-### 터미널에서도 답할 수 있습니다
+### 원래 화면에서도 답할 수 있습니다
 
-카드를 놓쳐도 됩니다. 어느 요청이든 그 세션의 터미널에서 답할 수 있고, 먼저 답한 쪽이 이깁니다.
+카드를 놓쳐도 원래 화면에서 답할 수 있습니다. Codex 앱·CLI는 공유 로컬 App Server로 연결하며 tmux가 필요하지 않습니다. [Codex 연결 안내](CODEX.md)에서 연결 조건을 확인하세요.
+
+- Codex 앱·공유 App Server CLI 승인과 질문: 카드와 원래 화면에 함께 뜹니다. 카드의 허용·거부·질문 답변은 원래 요청에 직접 전달하며, 원래 화면에서 먼저 답하면 카드가 사라집니다.
 
 - Claude Code 승인: 카드와 터미널 프롬프트가 함께 뜹니다. 카드에서 답하면 터미널 프롬프트가 닫힙니다.
-- Claude Code 질문, Codex 승인 (tmux 안에서 실행 중일 때): 카드와 터미널 다이얼로그가 함께 뜹니다. 카드에서 고르면 앱이 그 터미널 다이얼로그에 대신 입력하고, 터미널에서 답하면 카드가 사라집니다. 카드에 "터미널에도 떠 있습니다"라고 적혀 있습니다. Claude Code 질문과 Codex 승인 모두 실제 세션으로 확인했습니다(Codex 거부는 Esc라서 Codex가 "다르게 지시해 달라"는 중단으로 받습니다).
-- Claude Code 질문, Codex 승인 (tmux 밖): 카드가 먼저 뜨고, 20초 안에 답하지 않으면 터미널에 원래 다이얼로그가 뜹니다. 카드에 남은 시간이 보입니다.
+- Claude Code 질문, App Server에 연결되지 않은 Codex 승인 (tmux 안에서 실행 중일 때): 카드와 터미널 다이얼로그가 함께 뜹니다. 카드에서 고르면 앱이 그 터미널 다이얼로그에 대신 입력하고, 터미널에서 답하면 카드가 사라집니다. 카드에 "터미널에도 떠 있습니다"라고 적혀 있습니다. Claude Code 질문과 Codex 승인 모두 실제 세션으로 확인했습니다(Codex 거부는 Esc라서 Codex가 "다르게 지시해 달라"는 중단으로 받습니다).
+- Claude Code 질문, App Server에 연결되지 않은 Codex 승인 (tmux 밖): 카드가 먼저 뜨고, 20초 안에 답하지 않으면 터미널에 원래 다이얼로그가 뜹니다. 카드에 남은 시간이 보입니다.
 
 ## 5. 질문 카드
 
-Claude가 선택지를 주며 물을 때(`AskUserQuestion`)는 질문 카드가 뜨고 소리가 납니다.
+Claude Code(`AskUserQuestion`)나 Codex 앱·CLI(`request_user_input`)가 물을 때는 질문 카드가 뜨고 소리가 납니다.
 
 ![질문 카드](guide/card-question.png)
 
