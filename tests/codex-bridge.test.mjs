@@ -198,6 +198,25 @@ test('App Server가 담당하는 세션은 PermissionRequest 훅 카드와 중�
   assert.equal((await b.pending()).length, 0);
 });
 
+test('App Server의 나 대신 승인 모드는 모든 권한 요청을 원래 Codex에 남기고 질문은 중계한다', async t => {
+  for (const reviewer of ['auto_review', 'guardian_subagent']) {
+    const b = await boot(t, {}, reviewer);
+    b.request(approval(401));
+    b.request({ ...approval(402), method: 'item/fileChange/requestApproval' });
+    b.request({ ...approval(403), method: 'item/permissions/requestApproval', params: { threadId: 'app-thread', turnId: 'turn', permissions: { fileSystem: { write: ['/tmp/test'] } } } });
+    // A question provides an ordered processing barrier on the same socket.
+    b.request(questions(404));
+    const [card] = await until(b.pending, list => list.length === 1);
+    assert.equal(card.kind, 'question');
+    assert.deepEqual(b.sent, [], '권한을 대신 승인하거나 거부하지 않는다');
+    assert.deepEqual((await b.api('/requests?status=recent')).body, [], '자동 승인 기록도 남기지 않는다');
+    b.send({ method: 'thread/settings/updated', params: { threadId: 'app-thread', threadSettings: { approvalsReviewer: 'user' } } });
+    await until(() => b.api('/codex?sessionId=app-thread'), r => r.body.approvalsReviewer === 'user');
+    b.request(approval(405));
+    await until(b.pending, list => list.length === 2);
+  }
+});
+
 test('나 대신 승인 세션의 MCP 권한 훅은 카드 대기 없이 Codex 자동 검토로 인계한다', async t => {
   const b = await boot(t, {}, 'auto_review');
   assert.equal((await b.api('/codex?sessionId=app-thread')).body.approvalsReviewer, 'auto_review');
