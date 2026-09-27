@@ -156,4 +156,6 @@ sh surfaces/macos/test-startup.sh # 빌드 앱의 코어로 기동·설정 오�
 node surfaces/macos/Tests/launcher-smoke.mjs # 실제 번들 실행기: 컴파일러 없이 설치·인자 전달 검증
 ```
 
+배포 빌드는 임시 코드 서명과 번들 서명 검증을 모두 통과한 뒤 ZIP·DMG를 만듭니다. 실패하면 빌드를 중단하고 `codesign` 오류를 표시합니다. 이 검증은 Apple 배포 서명이나 공증을 대신하지 않습니다.
+
 MIT
