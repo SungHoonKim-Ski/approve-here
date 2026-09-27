@@ -17,6 +17,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var codexStatus: CodexConnectionStatus?
   private var notice: String?
   private var installingLauncher = false
+  private var isBootstrapping = false
+  private var startingDaemon = false
+  private var startupError: String?
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
   private var hotkey: GlobalHotkey?
@@ -54,7 +57,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       demoCard: { [weak self] in self?.cards.showDemo() },
       retryNode: { [weak self] in self?.retryNode() },
       installCodexLauncher: { [weak self] in self?.installCodexLauncher() },
-      revealCodexLauncher: { NSWorkspace.shared.activateFileViewerSelecting([Runtime.codexLauncher]) }
+      revealCodexLauncher: { NSWorkspace.shared.activateFileViewerSelecting([Runtime.codexLauncher]) },
+      openLogs: { _ = NSWorkspace.shared.open(Runtime.home) }
     ))
     rulesPanel = RulesPanelController(client: client)
     if Bundle.main.bundleIdentifier != nil { setupNotifications() }
@@ -72,13 +76,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   // MARK: 기동
 
   private func bootstrap() {
+    guard !isBootstrapping, !startingDaemon else { return }
+    isBootstrapping = true
+    Task { @MainActor in self.onboarding.updateStartup(error: self.startupError, checking: true, node: self.node) }
     work.async { [weak self] in
       guard let self else { return }
       let found = Runtime.findNode()
       Runtime.log("node=\(found ?? "없음") \(found.map(Runtime.nodeVersion) ?? "")")
       DispatchQueue.main.async { self.node = found; self.render() }
       guard let found else {
-        DispatchQueue.main.async { self.onboarding.show(node: nil) }
+        DispatchQueue.main.async {
+          self.isBootstrapping = false
+          self.startupError = nil
+          self.onboarding.updateStartup(error: nil, checking: false, node: nil)
+          self.onboarding.show(node: nil)
+          self.render()
+        }
         return
       }
       if self.yieldsToInstalled {
@@ -101,11 +114,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
           }
         }
       }
-      Runtime.ensureDaemon(node: found)
+      let result = Runtime.ensureDaemon(node: found)
       DispatchQueue.main.async {
+        self.isBootstrapping = false
+        self.lastEnsureAt = Date()
+        self.handleDaemonStart(result)
         self.poll()
         // 처음 켰거나 아무 CLI도 연결하지 않았으면 시작 안내를 띄운다.
-        if !OnboardingPanel.seen || Provider.allCases.allSatisfy({ !HookConnections.isConnected($0) }) {
+        if result.status != 0 || !OnboardingPanel.seen || Provider.allCases.allSatisfy({ !HookConnections.isConnected($0) }) {
           self.onboarding.show(node: found)
         }
       }
@@ -117,6 +133,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       do {
         let next = try await client.pending()
         daemonUp = true
+        if startupError != nil {
+          startupError = nil
+          onboarding.updateStartup(error: nil, checking: isBootstrapping || startingDaemon, node: node)
+        }
         codexStatus = try? await client.codexStatus()
         let fresh = next.filter { !known.contains($0.id) }
         known.formUnion(next.map(\.id))
@@ -132,6 +152,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         codexStatus = nil
         pending = []
         cards.sync([])
+        if node != nil && !isBootstrapping && !startingDaemon && startupError == nil {
+          startupError = "대기함에 연결할 수 없습니다. 연결을 다시 확인하거나 원래 에이전트 화면에서 답해 주세요."
+          onboarding.updateStartup(error: startupError, checking: false, node: node)
+        }
         ensureDaemonIfNeeded()
       }
       render()
@@ -139,9 +163,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   }
 
   private func ensureDaemonIfNeeded() {
-    guard let node, Date().timeIntervalSince(lastEnsureAt) > 15 else { return }
+    guard let node, !isBootstrapping, !startingDaemon, Date().timeIntervalSince(lastEnsureAt) > 15 else { return }
     lastEnsureAt = Date()
-    work.async { Runtime.ensureDaemon(node: node) }
+    startingDaemon = true
+    Task { @MainActor in self.onboarding.updateStartup(error: self.startupError, checking: true, node: self.node) }
+    work.async { [weak self] in
+      let result = Runtime.ensureDaemon(node: node)
+      DispatchQueue.main.async {
+        guard let self else { return }
+        self.startingDaemon = false
+        self.lastEnsureAt = Date()
+        self.handleDaemonStart(result)
+      }
+    }
+  }
+
+  @MainActor private func handleDaemonStart(_ result: (status: Int32, output: String)) {
+    if result.status != 0 {
+      let detail = result.output.trimmingCharacters(in: .whitespacesAndNewlines)
+      if detail.contains("EADDRINUSE") {
+        startupError = "대기함의 연결 포트를 다른 프로그램이 사용하고 있습니다. 기록 폴더의 daemon.log를 확인해 주세요."
+      } else if result.status == -2 {
+        startupError = "대기함 시작에 시간이 너무 오래 걸렸습니다. 잠시 뒤 다시 시도해 주세요."
+      } else {
+        startupError = "대기함을 시작하지 못했습니다." + (detail.isEmpty ? "" : "\n\(detail.prefix(300))")
+      }
+    }
+    onboarding.updateStartup(error: startupError, checking: false, node: node)
+    render()
   }
 
   // MARK: 메뉴
@@ -149,7 +198,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private func render() {
     let connected = Provider.allCases.filter(HookConnections.isConnected)
     // 글자 하나짜리 아이콘은 다른 상태 아이콘 사이에서 안 보인다. 받은편지함 모양으로 두고, 대기 수만 글자로 붙인다.
-    let symbol = node == nil ? "exclamationmark.triangle" : !daemonUp ? "tray" : pending.isEmpty ? (connected.isEmpty ? "tray" : "tray.full") : "tray.and.arrow.down.fill"
+    let symbol = node == nil || startupError != nil ? "exclamationmark.triangle" : !daemonUp ? "tray" : pending.isEmpty ? (connected.isEmpty ? "tray" : "tray.full") : "tray.and.arrow.down.fill"
     if let image = NSImage(systemSymbolName: symbol, accessibilityDescription: "Approve Here") {
       image.isTemplate = true
       item.button?.image = image
@@ -160,15 +209,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let menu = NSMenu()
 
     if node == nil {
-      menu.addItem(disabled("Node.js를 찾을 수 없습니다"))
-      menu.addItem(disabled("Claude Code·Codex가 쓰는 Node.js가 필요합니다"))
-      menu.addItem(action("Node.js 내려받기…", #selector(openNodeDownload)))
-      menu.addItem(action("다시 찾기", #selector(retryNode)))
+      if isBootstrapping {
+        menu.addItem(disabled("Node.js를 확인하는 중…"))
+      } else {
+        menu.addItem(disabled("Node.js 20 이상을 찾을 수 없습니다"))
+        menu.addItem(disabled("카드를 전달하는 데 Node.js가 필요합니다"))
+        menu.addItem(action("Node.js 내려받기…", #selector(openNodeDownload)))
+        menu.addItem(action("다시 찾기", #selector(retryNode)))
+      }
     } else {
       for provider in Provider.allCases {
         let on = HookConnections.isConnected(provider)
         let entry = action("\(provider.title)  \(on ? "연결됨" : "연결 안 됨")", #selector(toggleConnection(_:)))
         entry.state = on ? .on : .off
+        entry.isEnabled = !isBootstrapping
         entry.representedObject = provider.rawValue
         menu.addItem(entry)
       }
@@ -184,7 +238,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     menu.addItem(.separator())
 
     if !daemonUp {
-      menu.addItem(disabled(node == nil ? "대기함 꺼짐" : "대기함 준비 중…"))
+      menu.addItem(disabled(node == nil ? "대기함 꺼짐" : startupError == nil ? "대기함 준비 중…" : "대기함 연결 실패"))
+      if startupError != nil { menu.addItem(action("연결 다시 확인", #selector(retryNode))) }
     } else if pending.isEmpty {
       menu.addItem(disabled(connected.isEmpty ? "위에서 연결을 켜면 승인 요청이 여기로 옵니다" : "대기 중인 요청 없음"))
     }
@@ -280,7 +335,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   }
 
   private func connect(_ provider: Provider) {
-    guard let node else { return }
+    guard let node, !isBootstrapping else { return }
     if yieldsToInstalled {
       notice = "Applications의 Approve Here에서 연결을 켜고 끄세요"
       render()
@@ -299,6 +354,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   }
 
   private func disconnect(_ provider: Provider) {
+    guard !isBootstrapping else { return }
     if yieldsToInstalled {
       notice = "Applications의 Approve Here에서 연결을 켜고 끄세요"
       render()

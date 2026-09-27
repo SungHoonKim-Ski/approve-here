@@ -120,7 +120,7 @@ Codex 앱 ─────── 중계 실행기(표준 입출력 통과) ──
 
 ## Node.js가 필요합니다
 
-훅과 대기함 코어는 Node.js로 돕니다(앱 안에 들어 있고, Node만 시스템에 있으면 됩니다). Claude Code나 Codex CLI를 npm으로 설치했다면 이미 있습니다. 없으면 뱃지가 `⚠︎`로 뜨고 메뉴에서 내려받기 링크를 보여 줍니다.
+훅과 대기함 코어는 Node.js 20 이상으로 돕니다(앱 안에 들어 있고, Node만 시스템에 있으면 됩니다). Claude Code나 Codex CLI를 npm으로 설치했다면 이미 있을 수 있습니다. 앱은 실행할 수 있는 20 이상 버전을 확인해 사용합니다. 없거나 버전이 낮으면 시작 안내에서 내려받기와 설치 후 다시 찾기를 제공합니다.
 
 ## 고급: 내 정책 훅 연결
 
@@ -147,9 +147,11 @@ git clone https://github.com/SungHoonKim-Ski/approve-here && cd approve-here
 npm ci                         # Node 의존성 설치
 npm test                       # Node 코어 테스트
 sh surfaces/macos/test-settings.sh # macOS 설정 보존 테스트
+sh surfaces/macos/test-runtime.sh # 큰 출력·시간 제한·Node 버전 선택 검증
 sh surfaces/macos/test-rules.sh # 실제 네이티브 클라이언트와 임시 대기함의 규칙 해제 테스트
 sh surfaces/macos/build.sh     # SwiftPM만으로 .app·zip·dmg (Xcode 불필요)
 APPROVE_HERE_SKIP_DMG=1 sh surfaces/macos/build.sh # Finder 자동화 없이 .app·zip만 빌드
+sh surfaces/macos/test-startup.sh # 빌드 앱의 코어로 기동·설정 오류·포트 충돌·복구 검증
 node surfaces/macos/Tests/launcher-smoke.mjs # 실제 번들 실행기: 컴파일러 없이 설치·인자 전달 검증
 ```
 

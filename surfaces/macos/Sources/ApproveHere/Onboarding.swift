@@ -12,6 +12,7 @@ final class OnboardingPanel {
     var retryNode: () -> Void
     var installCodexLauncher: () -> Void
     var revealCodexLauncher: () -> Void
+    var openLogs: () -> Void = {}
   }
 
   private var panel: NSPanel?
@@ -19,6 +20,14 @@ final class OnboardingPanel {
   private let width: CGFloat = 400
   private var message: String?
   private var installingLauncher = false
+  private var startupError: String?
+  private var checkingConnection = false
+
+  func updateStartup(error: String?, checking: Bool, node: String?) {
+    startupError = error
+    checkingConnection = checking
+    refresh(node: node)
+  }
 
   func update(message: String?, installingLauncher: Bool = false, node: String?) {
     self.message = message
@@ -48,7 +57,7 @@ final class OnboardingPanel {
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.hidesOnDeactivate = false
     panel.isReleasedWhenClosed = false
-    let view = OnboardingView(node: node, message: message, installingLauncher: installingLauncher, actions: actions, close: { [weak self] in
+    let view = OnboardingView(node: node, message: message, installingLauncher: installingLauncher, startupError: startupError, checkingConnection: checkingConnection, actions: actions, close: { [weak self] in
       OnboardingPanel.seen = true
       self?.close()
     })
@@ -84,6 +93,8 @@ struct OnboardingView: View {
   let node: String?
   let message: String?
   let installingLauncher: Bool
+  var startupError: String? = nil
+  var checkingConnection = false
   let actions: OnboardingPanel.Actions
   let close: () -> Void
 
@@ -98,14 +109,31 @@ struct OnboardingView: View {
       Text("Claude Code·Codex가 \"허용할까요?\"라고 물을 때, 터미널을 찾지 않고 여기서 답합니다. 질문도 여기서 답합니다.")
         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
+      if checkingConnection {
+        HStack(spacing: 6) {
+          ProgressView().controlSize(.small)
+          Text("대기함 연결을 확인하는 중…").font(.caption)
+        }
+      }
+      if let startupError {
+        VStack(alignment: .leading, spacing: 6) {
+          Label("대기함 연결을 확인해 주세요", systemImage: "exclamationmark.triangle").fontWeight(.medium)
+          Text(startupError).font(.caption).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+          HStack {
+            Button("다시 시도", action: actions.retryNode).disabled(checkingConnection)
+            Button("오류 기록 열기", action: actions.openLogs)
+          }.controlSize(.small)
+        }
+      }
+
       if node == nil {
         VStack(alignment: .leading, spacing: 6) {
-          Label("Node.js를 찾을 수 없습니다", systemImage: "exclamationmark.triangle").fontWeight(.medium)
-          Text("카드를 전달하는 데 Node.js가 필요합니다. 설치 뒤 아래 ‘설치 후 다시 찾기’를 누르세요.").font(.caption).foregroundStyle(.secondary)
+          Label(checkingConnection ? "Node.js를 찾고 있습니다" : "Node.js 20 이상을 찾을 수 없습니다", systemImage: checkingConnection ? "magnifyingglass" : "exclamationmark.triangle").fontWeight(.medium)
+          Text("카드를 전달하는 데 Node.js 20 이상이 필요합니다. 설치 뒤 아래 ‘설치 후 다시 찾기’를 누르세요.").font(.caption).foregroundStyle(.secondary)
           HStack {
             Button("Node.js 내려받기") { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }
             Button("설치 후 다시 찾기", action: actions.retryNode)
-          }.controlSize(.small)
+          }.controlSize(.small).disabled(checkingConnection)
         }
       } else {
         step(1, "쓰는 에이전트를 연결합니다") {
@@ -113,14 +141,14 @@ struct OnboardingView: View {
             ForEach(Provider.allCases, id: \.rawValue) { provider in
               let on = HookConnections.isConnected(provider)
               Button(on ? "\(provider.title) 연결됨 ✓" : "\(provider.title) 연결") { actions.connect(provider) }
-                .tint(on ? .green : nil).disabled(on)
+                .tint(on ? .green : nil).disabled(on || checkingConnection)
             }
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
             Text("Codex를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱의 질문을 받으려면 아래 실행기도 설치해야 합니다.").font(.caption).foregroundStyle(.secondary)
             Button(installingLauncher ? "Codex 실행기 설치 중…" : "Codex 앱 실행기 설치", action: actions.installCodexLauncher)
-              .disabled(installingLauncher).controlSize(.small)
+              .disabled(installingLauncher || checkingConnection).controlSize(.small)
             if FileManager.default.fileExists(atPath: Runtime.codexLauncher.path) {
               Button("설치된 실행기 보기", action: actions.revealCodexLauncher).controlSize(.small)
               Text("Codex 앱을 완전히 종료한 뒤, 열린 폴더의 ‘Codex with Approve Here’를 실행하세요. 앞으로도 이 실행기로 Codex를 열어 주세요.")
