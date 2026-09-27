@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, chmodSync } from 'n
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { replaceFile } from './atomic-file.mjs';
 
 export const DEFAULTS = Object.freeze({
   port: 4400,
@@ -84,7 +85,7 @@ export function readAllowlist(home = inboxHome()) {
 
 export function writeAllowlist(home, rules) {
   ensureHome(home);
-  writeFileSync(join(home, 'allowlist.json'), JSON.stringify(rules, null, 2) + '\n', { mode: 0o600 });
+  replaceFile(join(home, 'allowlist.json'), JSON.stringify(rules, null, 2) + '\n');
 }
 
 export function readDaemonInfo(home = inboxHome()) {
