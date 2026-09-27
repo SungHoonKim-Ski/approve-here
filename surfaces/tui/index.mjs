@@ -72,7 +72,7 @@ async function decide(behavior, remember) {
   const body = remember ? { behavior, remember } : { behavior };
   try {
     const result = await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify(body) });
-    notice = result.rememberError ?? `${behavior === 'allow' ? '허용' : '거부'}: ${summary(target)}${remember ? ` (기억: ${remember.commandPrefix})` : ''}`;
+    notice = storageWarning(result) || `${behavior === 'allow' ? '허용' : '거부'}: ${summary(target)}${remember ? ` (기억: ${remember.commandPrefix})` : ''}`;
   } catch (error) {
     notice = `실패: ${error.message}`;
   }
@@ -96,8 +96,8 @@ async function pickOption(digit) {
     return render();
   }
   try {
-    await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify({ answers: next }) });
-    notice = `답 전송: ${Object.values(next).join(', ')}`;
+    const result = await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify({ answers: next }) });
+    notice = storageWarning(result) || `답 전송: ${Object.values(next).join(', ')}`;
   } catch (error) {
     notice = `실패: ${error.message}`;
   }
@@ -109,8 +109,8 @@ async function passthrough() {
   const target = pending[cursor];
   if (!target || target.kind !== 'question') return;
   try {
-    await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
-    notice = '그 세션의 원래 다이얼로그로 넘겼습니다';
+    const result = await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
+    notice = storageWarning(result) || '그 세션의 원래 다이얼로그로 넘겼습니다';
   } catch (error) {
     notice = `실패: ${error.message}`;
   }
@@ -138,6 +138,10 @@ function summary(r) {
   const questions = r.toolInput?.questions;
   if (Array.isArray(questions)) return `질문 띄우기: ${questions.map(q => q.question).join(' / ')}`;
   return `${r.toolName} ${JSON.stringify(r.toolInput)}`;
+}
+
+function storageWarning(result) {
+  return [result?.rememberError, result?.historyError].filter(value => typeof value === 'string').join(' ');
 }
 
 // 되돌릴 수 없는 명령은 접두로 기억시키지 않는다.
@@ -186,6 +190,7 @@ function render() {
     const by = r.status === 'auto' ? `자동(${r.decidedBy})` : r.status;
     lines.push(`  ${by.padEnd(22)} ${summary(r)}`.slice(0, width));
     if (r.rememberError) lines.push('    자동 승인 규칙 저장 실패 — 이번 요청은 허용됨');
+    if (r.historyError) lines.push('    답변은 전달됨 — 처리 이력 저장 실패');
   }
   lines.push('');
   if (notice) lines.push(`» ${notice}`.slice(0, width));

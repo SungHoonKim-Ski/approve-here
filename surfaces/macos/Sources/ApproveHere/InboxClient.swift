@@ -188,17 +188,21 @@ final class InboxClient {
     if let prefix { body["remember"] = ["commandPrefix": prefix] }
     let data = try await request("/requests/\(id)/decision", method: "POST", body: body)
     let receipt = try JSONDecoder().decode(DecisionReceipt.self, from: data)
-    return receipt.rememberError
+    return receipt.warning
   }
 
   /// 질문 카드의 답. {질문 원문: 고른 라벨 또는 직접 입력}. multiSelect는 라벨을 ", "로 잇는다.
-  func answer(_ id: String, answers: [String: String]) async throws {
-    _ = try await request("/requests/\(id)/decision", method: "POST", body: ["answers": answers])
+  @discardableResult
+  func answer(_ id: String, answers: [String: String]) async throws -> String? {
+    let data = try await request("/requests/\(id)/decision", method: "POST", body: ["answers": answers])
+    return try JSONDecoder().decode(DecisionReceipt.self, from: data).warning
   }
 
   /// 질문을 앱에서 답하지 않고 그 세션의 원래 다이얼로그로 넘긴다.
-  func passthrough(_ id: String) async throws {
-    _ = try await request("/requests/\(id)/decision", method: "POST", body: ["passthrough": true])
+  @discardableResult
+  func passthrough(_ id: String) async throws -> String? {
+    let data = try await request("/requests/\(id)/decision", method: "POST", body: ["passthrough": true])
+    return try JSONDecoder().decode(DecisionReceipt.self, from: data).warning
   }
 
   func jump(_ id: String) async throws {
@@ -206,7 +210,14 @@ final class InboxClient {
   }
 }
 
-private struct DecisionReceipt: Decodable { let rememberError: String? }
+private struct DecisionReceipt: Decodable {
+  let rememberError: String?
+  let historyError: String?
+  var warning: String? {
+    let messages = [rememberError, historyError].compactMap { $0 }
+    return messages.isEmpty ? nil : messages.joined(separator: "\n")
+  }
+}
 
 enum InboxError: LocalizedError {
   case daemonUnavailable
