@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { openSync } from 'node:fs';
+import { closeSync, openSync } from 'node:fs';
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureHome, inboxHome, loadConfig, readDaemonInfo, readToken, writeDaemonInfo } from './config.mjs';
@@ -17,13 +18,36 @@ export async function daemonHealth(home = inboxHome()) {
   const candidates = [...new Set([info?.port, loadConfig(home).port].filter(Boolean))];
   for (const port of candidates) {
     try {
-      const res = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(1500) });
+      const token = readToken(home);
+      const challenge = randomBytes(24).toString('hex');
+      const res = await fetch(`http://127.0.0.1:${port}/health?challenge=${challenge}`, { signal: AbortSignal.timeout(1500) });
       if (!res.ok) continue;
       const value = await res.json();
-      if (!value.ok) continue;
-      const pid = info?.port === port ? info.pid : value.pid ?? null;
+      if (!value || value.ok !== true || !token || !Number.isSafeInteger(value.pid) || value.pid <= 0) continue;
+      if (value.service === 'approve-here') {
+        const expected = createHmac('sha256', token).update(challenge).digest();
+        if (value.healthProtocol !== 1 || !/^[a-f0-9]{64}$/.test(value.proof ?? '') || !timingSafeEqual(expected, Buffer.from(value.proof, 'hex'))) continue;
+      } else {
+        // 0.5.2 이전 대기함은 서명이 없다. 이전 health 형식과 인증된 상태 응답을
+        // 모두 확인해야 업그레이드 중 실행하던 대기함을 계속 사용할 수 있다.
+        if (Object.hasOwn(value, 'service') || !Number.isSafeInteger(value.pending) || value.pending < 0 || typeof value.surfaceActive !== 'boolean' || !Object.hasOwn(value, 'codexAppServer')) continue;
+        const unauthorized = await fetch(`http://127.0.0.1:${port}/codex`, {
+          headers: { 'x-approve-here-token': randomBytes(24).toString('hex'), 'x-approve-here-client': 'hook' },
+          signal: AbortSignal.timeout(1500),
+        });
+        await unauthorized.arrayBuffer();
+        if (unauthorized.status !== 401) continue;
+        const status = await fetch(`http://127.0.0.1:${port}/codex`, {
+          headers: { 'x-approve-here-token': token, 'x-approve-here-client': 'hook' },
+          signal: AbortSignal.timeout(1500),
+        });
+        if (!status.ok) continue;
+        const body = await status.json();
+        if (typeof body?.bridged !== 'boolean' || !Object.hasOwn(body, 'approvalsReviewer') || !(body.approvalsReviewer === null || typeof body.approvalsReviewer === 'string')) continue;
+      }
+      const pid = value.pid;
       // 기록 없이 살아 있는 데몬을 인정했으면 기록을 복구한다 — 표면(앱·TUI)은 daemon.json으로 데몬을 찾는다.
-      if (info?.port !== port) writeDaemonInfo(home, { pid, port, startedAt: new Date().toISOString(), adopted: true });
+      if (info?.port !== port || info?.pid !== pid) writeDaemonInfo(home, { pid, port, startedAt: new Date().toISOString(), adopted: true });
       return { ...value, port, pid };
     } catch {}
   }
@@ -41,11 +65,14 @@ export async function ensureDaemon({ home = inboxHome(), port, waitMs = 8000 } =
   const log = openSync(join(root, 'daemon.log'), 'a');
   const args = [BIN, 'daemon'];
   if (port !== undefined) args.push('--port', String(port));
-  const child = spawn(process.execPath, args, {
-    detached: true,
-    stdio: ['ignore', log, log],
-    env: { ...process.env, APPROVE_HERE_HOME: root },
-  });
+  let child;
+  try {
+    child = spawn(process.execPath, args, {
+      detached: true,
+      stdio: ['ignore', log, log],
+      env: { ...process.env, APPROVE_HERE_HOME: root },
+    });
+  } finally { closeSync(log); }
   child.unref();
   const deadline = Date.now() + waitMs;
   while (Date.now() < deadline) {
@@ -58,16 +85,10 @@ export async function ensureDaemon({ home = inboxHome(), port, waitMs = 8000 } =
   throw new Error(`데몬이 ${waitMs / 1000}초 안에 응답하지 않았습니다. ${join(root, 'daemon.log')}를 확인하세요.`);
 }
 
-/** pid 기록이 있으면 SIGTERM, 없으면 데몬 자신에게 /shutdown을 요청한다. */
+/** 오래된 pid 기록으로 다른 프로세스를 종료하지 않고 인증된 대기함에 종료를 요청한다. */
 export async function stopDaemon(home = inboxHome()) {
   const health = await daemonHealth(home);
   if (!health) return false;
-  if (health.pid) {
-    try {
-      process.kill(health.pid, 'SIGTERM');
-      return true;
-    } catch {}
-  }
   try {
     const res = await fetch(`http://127.0.0.1:${health.port}/shutdown`, {
       method: 'POST',
