@@ -41,7 +41,7 @@ const commands = {
   async status() {
     const health = await daemonHealth(inboxHome());
     console.log(health ? `실행 중 · 포트 ${health.port} · 대기 ${health.pending}건 · 표면 ${health.surfaceActive ? '있음' : '없음'}` : '데몬이 실행 중이 아닙니다. 표면(tui·app·open)을 열면 같이 뜹니다.');
-    if (health?.codexAppServer) console.log(health.codexAppServer.connected ? 'Codex 앱·CLI 서버 연결됨' : `Codex 앱·CLI 서버 연결 대기${health.codexAppServer.error ? `: ${health.codexAppServer.error}` : ''}`);
+    if (health?.codexAppServer) console.log(health.codexAppServer.sharedConnected ? 'Codex CLI 공유 서버 연결됨' : `Codex CLI 공유 서버 연결 대기${health.codexAppServer.sharedError ? `: ${health.codexAppServer.sharedError}` : ''}`);
     if (health?.codexAppServer) console.log(`Codex 앱 중계 ${health.codexAppServer.relayCount ?? 0}개 연결됨`);
   },
   async 'install-codex-launcher'() {

@@ -27,7 +27,7 @@ async function boot(t, config = {}) {
   serverInput.on('data', data => { buffer += data.toString(); let n; while ((n = buffer.indexOf('\n')) >= 0) { const line = buffer.slice(0, n); buffer = buffer.slice(n + 1); try { native.push(JSON.parse(line)); } catch {} } });
   appOutput.on('data', data => output += data.toString());
   relay.attach({ clientInput: appInput, clientOutput: appOutput, serverInput, serverOutput });
-  const daemon = await startDaemon({ home, port: 0, codexBridge: { enabled: () => true, intervalMs: 25 } });
+  const daemon = await startDaemon({ home, port: 0, codexBridge: { socketPath: join(home, 'missing-shared.sock'), enabled: () => true, intervalMs: 25 } });
   t.after(async () => { await daemon.close(); await relay.close(); for (const stream of [appInput, appOutput, serverInput, serverOutput]) stream.destroy(); });
   const api = async (path, body) => { const r = await fetch(`http://127.0.0.1:${daemon.port}${path}`, { method: body ? 'POST' : 'GET', headers: { 'x-approve-here-token': daemon.token, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}) }); return { code: r.status, body: await r.json() }; };
   const client = message => appInput.write(JSON.stringify(message) + '\n');
@@ -39,6 +39,15 @@ async function boot(t, config = {}) {
   return { home, relay, native, appInput, client, server, output: () => output, api, pending: async () => (await api('/requests')).body, decide: (id, decision) => api(`/requests/${id}/decision`, decision) };
 }
 const question = (id = 10, secret = false) => ({ id, method: 'item/tool/requestUserInput', params: { threadId: 'desktop', turnId: 'turn', itemId: 'q', questions: [{ id: 'question-id', question: '선택하세요', isSecret: secret, options: [{ label: '예', description: '진행' }, { label: '아니요', description: '중지' }] }] } });
+
+test('앱 중계만 연결돼 있어도 CLI 공유 서버가 준비됐다고 표시하지 않는다', async t => {
+  const b = await boot(t);
+  const { codexAppServer: status } = (await b.api('/health')).body;
+  assert.equal(status.connected, true);
+  assert.equal(status.relayCount, 1);
+  assert.equal(status.sharedConnected, false);
+  assert.match(status.sharedError, /찾지 못했습니다/);
+});
 
 test('stdio 앱 대화의 질문 답변이 원래 서버로 돌아가고 앱 응답과 중복되지 않는다', async t => {
   const b = await boot(t); b.server(question());
