@@ -41,7 +41,7 @@ export class Store {
       // 이 시각이 지나면 훅이 물러나 CLI에 원래 프롬프트가 뜬다. null이면 CLI가 이미 함께 띄우고 있다.
       handoffAt: input.handoffAt ?? null,
       // wait: 훅이 결정을 기다림 · mirror: 훅은 물러났고 터미널 다이얼로그가 떠 있음(카드 결정은 tmux 키로 전달)
-      mode: input.mode === 'mirror' ? 'mirror' : 'wait',
+      mode: ['mirror', 'codex'].includes(input.mode) ? input.mode : 'wait',
       status,
       decision: status === 'auto' ? input.decision ?? null : null,
       decidedBy: status === 'auto' ? input.decidedBy ?? 'policy' : status === 'skipped' ? input.decidedBy ?? 'no-surface' : null,

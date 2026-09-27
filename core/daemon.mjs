@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { Store, PENDING } from './store.mjs';
 import { ensureHome, ensureToken, loadConfig, readAllowlist, writeAllowlist, writeDaemonInfo } from './config.mjs';
 import { defaultTmux } from './tmux.mjs';
+import { startCodexBridge } from './codex-bridge.mjs';
 
 const MAX_BODY = 256 * 1024;
 const MAX_WAIT_SECONDS = 30;
@@ -29,6 +30,7 @@ export async function startDaemon({
   idleCheckMs = 30000,
   onIdle = () => {},
   onShutdown = () => {},
+  codexBridge = false,
 } = {}) {
   const root = ensureHome(home);
   const config = loadConfig(root);
@@ -42,6 +44,7 @@ export async function startDaemon({
   const server = createServer((req, res) => handle(req, res).catch(error => fail(res, error)));
 
   const surfaceActive = () => Date.now() - lastSurfaceAt < presenceMs;
+  const bridge = codexBridge ? startCodexBridge({ home: root, store, surfaceActive, ...(typeof codexBridge === 'object' ? codexBridge : {}) }) : null;
   store.subscribe(() => (lastActivityAt = Date.now()));
   // 표면도 대기 요청도 없이 오래 놀면 물러난다. 표면이 다시 열리면 ensureDaemon이 새로 띄운다.
   const idleTimer =
@@ -57,9 +60,13 @@ export async function startDaemon({
     const url = new URL(req.url, 'http://127.0.0.1');
     const [, resource, id, action] = url.pathname.split('/');
     if (req.method === 'GET' && url.pathname === '/health')
-      return json(res, 200, { ok: true, pid: process.pid, pending: store.list(PENDING).length, surfaceActive: surfaceActive() });
+      return json(res, 200, { ok: true, pid: process.pid, pending: store.list(PENDING).length, surfaceActive: surfaceActive(), codexAppServer: bridge?.status ?? null });
     if (req.method === 'GET' && (url.pathname === '/' || url.pathname.startsWith('/assets/'))) return serveWeb(url.pathname, res);
     authorize(req, url);
+    if (resource === 'codex' && req.method === 'GET') {
+      const sessionId = url.searchParams.get('sessionId');
+      return json(res, 200, { bridged: bridge?.ownsSession(sessionId) ?? false, approvalsReviewer: bridge?.reviewerFor(sessionId) ?? null });
+    }
     // 훅이 아닌 인증된 호출은 전부 "표면이 보고 있다"는 신호다.
     if (req.headers['x-approve-here-client'] !== 'hook') lastSurfaceAt = Date.now();
 
@@ -148,18 +155,32 @@ export async function startDaemon({
     if (record.kind === 'question') {
       if (input.behavior) throw new HttpError(400, '질문 카드에는 answers 또는 passthrough를 보내세요.');
       const decision = input.passthrough ? { passthrough: true } : { answers: input.answers };
+      if (record.mode === 'codex') {
+        await decideCodex(record, decision);
+        return store.decide(record.id, decision, 'user:codex');
+      }
       if (record.mode === 'mirror' && !input.passthrough) return await driveTerminal(record, decision);
       return store.decide(record.id, decision, 'user');
     }
     if (input.answers || input.passthrough) throw new HttpError(400, '권한 카드에는 behavior(allow|deny)를 보내세요.');
     const decision = input.message ? { behavior: input.behavior, message: input.message } : { behavior: input.behavior };
-    if (record.mode === 'mirror') return await driveTerminal(record, decision);
-    const decided = store.decide(record.id, decision, 'user');
-    if (input.behavior === 'allow' && input.remember?.commandPrefix) {
+    let decided;
+    if (record.mode === 'codex') {
+      await decideCodex(record, decision);
+      decided = store.decide(record.id, decision, 'user:codex');
+    } else if (record.mode === 'mirror') decided = await driveTerminal(record, decision);
+    else decided = store.decide(record.id, decision, 'user');
+    if (decided?.status === 'allowed' && input.remember?.commandPrefix) {
       const rule = { tool: record.toolName, commandPrefix: input.remember.commandPrefix, provider: record.provider };
       writeAllowlist(root, [...readAllowlist(root), rule]);
     }
     return decided;
+  }
+
+  async function decideCodex(record, decision) {
+    if (!bridge) throw new HttpError(409, 'Codex 연결이 없습니다.');
+    try { await bridge.decide(record, decision); }
+    catch (error) { throw new HttpError(409, error.message); }
   }
 
   function stream(req, res) {
@@ -199,6 +220,7 @@ export async function startDaemon({
     close: () =>
       new Promise(resolve => {
         if (idleTimer) clearInterval(idleTimer);
+        bridge?.close();
         server.close(() => {
           // 죽은 데몬의 기록이 남으면 ensureDaemon이 health 실패로 걸러내지만, 깨끗이 지우는 쪽이 낫다.
           try {
