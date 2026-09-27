@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// 앱이 품고 다니는 Node 코어(훅·데몬)와 그것을 돌릴 node를 찾는다. 사용자는 터미널을 열지 않는다.
@@ -29,11 +30,22 @@ enum Runtime {
   }
 
   /// 로그인 셸의 PATH로 node를 찾는다(nvm·homebrew 등). 못 찾으면 흔한 자리를 직접 본다.
-  static func findNode() -> String? {
-    let (_, output) = run("/bin/zsh", ["-lc", "command -v node"], timeout: 10)
-    let fromShell = output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.last { $0.hasPrefix("/") }
-    let candidates = [fromShell, "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"].compactMap { $0 }
-    return candidates.first { FileManager.default.isExecutableFile(atPath: $0) }
+  static func findNode(candidatePaths: [String]? = nil) -> String? {
+    let candidates: [String]
+    if let candidatePaths { candidates = candidatePaths }
+    else {
+      let (_, output) = run("/bin/zsh", ["-lc", "command -v node"], timeout: 10)
+      let fromShell = output.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.last { $0.hasPrefix("/") }
+      candidates = [fromShell, "/opt/homebrew/bin/node", "/usr/local/bin/node", "/usr/bin/node"].compactMap { $0 }
+    }
+    var seen = Set<String>()
+    for path in candidates where seen.insert(path).inserted && FileManager.default.isExecutableFile(atPath: path) {
+      let (status, output) = run(path, ["--version"], timeout: 5)
+      let version = output.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard status == 0, version.hasPrefix("v"), let major = Int(version.dropFirst().split(separator: ".").first ?? ""), major >= 20 else { continue }
+      return path
+    }
+    return nil
   }
 
   static func nodeVersion(_ node: String) -> String {
@@ -42,10 +54,20 @@ enum Runtime {
 
   /// 데몬이 없으면 띄운다. CLI의 ensure-daemon과 같은 코드를 쓴다(표면이 데몬을 데리고 다닌다).
   @discardableResult
-  static func ensureDaemon(node: String) -> Bool {
+  static func ensureDaemon(node: String) -> (status: Int32, output: String) {
+    let logURL = home.appendingPathComponent("daemon.log")
+    let before = ((try? FileManager.default.attributesOfItem(atPath: logURL.path)[.size]) as? NSNumber)?.uint64Value ?? 0
     let (status, output) = run(node, [cliScript.path, "ensure-daemon"], env: ["APPROVE_HERE_HOME": home.path], timeout: 15)
-    log("ensure-daemon exit=\(status) \(output.trimmingCharacters(in: .whitespacesAndNewlines))")
-    return status == 0
+    var detail = output
+    if status != 0, let reader = try? FileHandle(forReadingFrom: logURL) {
+      defer { try? reader.close() }
+      if let end = try? reader.seekToEnd(), end > before {
+        try? reader.seek(toOffset: max(before, end > 4096 ? end - 4096 : 0))
+        if let data = try? reader.read(upToCount: 4096) { detail += "\n" + String(decoding: data, as: UTF8.self) }
+      }
+    }
+    log("ensure-daemon exit=\(status) \(detail.trimmingCharacters(in: .whitespacesAndNewlines))")
+    return (status, detail)
   }
 
   static func stopDaemon(node: String) {
@@ -60,16 +82,50 @@ enum Runtime {
     var environment = ProcessInfo.processInfo.environment
     for (key, value) in env { environment[key] = value }
     process.environment = environment
-    let pipe = Pipe()
-    process.standardOutput = pipe
-    process.standardError = pipe
-    do { try process.run() } catch { return (-1, "\(error)") }
-    let deadline = DispatchTime.now() + timeout
+    // Waiting for exit before reading a pipe can deadlock when diagnostics fill it.
+    // A private temporary file also avoids waiting for descendants that inherit stdout.
+    let outputURL = FileManager.default.temporaryDirectory.appendingPathComponent("approve-here-output-\(UUID().uuidString)")
+    guard FileManager.default.createFile(atPath: outputURL.path, contents: nil, attributes: [.posixPermissions: 0o600]),
+          let output = try? FileHandle(forWritingTo: outputURL) else {
+      try? FileManager.default.removeItem(at: outputURL)
+      return (-1, "명령 실행의 출력을 준비하지 못했습니다.")
+    }
+    defer { try? output.close(); try? FileManager.default.removeItem(at: outputURL) }
+    process.standardOutput = output
+    process.standardError = output
     let group = DispatchGroup()
     group.enter()
     process.terminationHandler = { _ in group.leave() }
-    if group.wait(timeout: deadline) == .timedOut { process.terminate(); return (-2, "timeout") }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
+    do { try process.run() } catch {
+      process.terminationHandler = nil
+      group.leave()
+      return (-1, "\(error)")
+    }
+    let timedOut = group.wait(timeout: .now() + timeout) == .timedOut
+    if timedOut {
+      if process.isRunning { process.terminate() }
+      if group.wait(timeout: .now() + 0.5) == .timedOut {
+        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        _ = group.wait(timeout: .now() + 1)
+      }
+    }
+    var captured = ""
+    if let reader = try? FileHandle(forReadingFrom: outputURL) {
+      defer { try? reader.close() }
+      let limit = 64 * 1024
+      if let size = try? reader.seekToEnd() {
+        try? reader.seek(toOffset: 0)
+        if size > UInt64(limit) {
+          let head = (try? reader.read(upToCount: limit / 2)) ?? Data()
+          try? reader.seek(toOffset: size - UInt64(limit / 2))
+          let tail = (try? reader.read(upToCount: limit / 2)) ?? Data()
+          captured = String(decoding: head, as: UTF8.self) + "\n(중간 출력은 길어서 생략했습니다.)\n" + String(decoding: tail, as: UTF8.self)
+        } else if let data = try? reader.read(upToCount: limit) {
+          captured = String(decoding: data, as: UTF8.self)
+        }
+      }
+    }
+    if timedOut { return (-2, captured + "\n실행 시간이 초과됐습니다.") }
+    return (process.terminationStatus, captured)
   }
 }
