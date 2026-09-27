@@ -78,7 +78,8 @@ export function ensureToken(home = inboxHome()) {
 
 export function readAllowlist(home = inboxHome()) {
   const rules = readJson(join(home, 'allowlist.json'), []);
-  return Array.isArray(rules) ? rules : [];
+  if (!Array.isArray(rules)) throw new Error('자동 승인 규칙 파일은 배열이어야 합니다. 기존 파일을 확인해 주세요.');
+  return rules;
 }
 
 export function writeAllowlist(home, rules) {
