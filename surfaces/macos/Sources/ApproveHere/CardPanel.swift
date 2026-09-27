@@ -199,7 +199,7 @@ struct RequestCardView: View {
   @State private var index = 0
 
   private var questions: [PendingRequest.Question] { request.questions ?? [] }
-  private var complete: Bool { !questions.isEmpty && questions.allSatisfy { draft[$0.question] != nil } }
+  private var complete: Bool { !questions.isEmpty && questions.allSatisfy { draft[$0.answerKey] != nil } }
   private var current: PendingRequest.Question? { questions.indices.contains(index) ? questions[index] : nil }
   private var isLast: Bool { index >= questions.count - 1 }
 
@@ -221,12 +221,14 @@ struct RequestCardView: View {
 
   /// 터미널과의 관계를 한 줄로. mirror면 양쪽에 떠 있고, wait+handoffAt이면 그 시각에 터미널로 넘어간다.
   @ViewBuilder private var handoffLine: some View {
-    if request.isMirror {
+    if request.isCodexDirect {
+      Text("Codex 앱·CLI에서도 답할 수 있습니다").font(.caption2).foregroundStyle(.secondary)
+    } else if request.isMirror {
       Text("터미널에도 떠 있습니다 · 어느 쪽에서 답해도 됩니다").font(.caption2).foregroundStyle(.secondary)
     } else if let handoff = request.handoffDate {
       TimelineView(.periodic(from: .now, by: 1)) { context in
         let remaining = Int(handoff.timeIntervalSince(context.date).rounded(.up))
-        Text(remaining > 0 ? "\(remaining)초 안에 답하지 않으면 터미널에 원래 질문이 뜹니다" : "터미널로 넘어갔습니다")
+        Text(remaining > 0 ? "\(remaining)초 안에 답하지 않으면 원래 화면으로 넘어갑니다" : "원래 화면으로 넘어갔습니다")
           .font(.caption2).foregroundStyle(.secondary)
       }
     }
@@ -330,29 +332,29 @@ struct RequestCardView: View {
   /// 지금 질문에 답이 있나(고른 옵션 또는 입력칸 글).
   private var currentAnswered: Bool {
     guard let q = current else { return false }
-    return draft[q.question] != nil || !(typed[q.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+    return draft[q.answerKey] != nil || !(typed[q.answerKey] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
   }
 
   /// 입력칸 글을 답으로 확정하고 다음 질문으로.
   private func advance() {
-    if let q = current, draft[q.question] == nil {
-      let text = (typed[q.question] ?? "").trimmingCharacters(in: .whitespaces)
-      if !text.isEmpty { draft[q.question] = text }
+    if let q = current, draft[q.answerKey] == nil {
+      let text = (typed[q.answerKey] ?? "").trimmingCharacters(in: .whitespaces)
+      if !text.isEmpty { draft[q.answerKey] = text }
     }
     if !isLast { index += 1 }
   }
 
   private var readyToSend: Bool {
     // 다 골랐거나, 아직 안 고른 질문마다 입력칸에 글이 있으면 보낼 수 있다.
-    questions.allSatisfy { draft[$0.question] != nil || !(typed[$0.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+    questions.allSatisfy { draft[$0.answerKey] != nil || !(typed[$0.answerKey] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
   }
 
   private func typedBinding(_ q: PendingRequest.Question) -> Binding<String> {
-    Binding(get: { typed[q.question] ?? "" }, set: { typed[q.question] = $0 })
+    Binding(get: { typed[q.answerKey] ?? "" }, set: { typed[q.answerKey] = $0 })
   }
 
   private func selected(_ q: PendingRequest.Question) -> Set<String> {
-    guard let value = draft[q.question] else { return [] }
+    guard let value = draft[q.answerKey] else { return [] }
     return Set(value.split(separator: ", ").map(String.init))
   }
 
@@ -362,12 +364,12 @@ struct RequestCardView: View {
     if q.multiSelect ?? false {
       var set = selected(q)
       if set.contains(label) { set.remove(label) } else { set.insert(label) }
-      draft[q.question] = set.isEmpty ? nil : (q.options ?? []).map(\.label).filter(set.contains).joined(separator: ", ")
+      draft[q.answerKey] = set.isEmpty ? nil : (q.options ?? []).map(\.label).filter(set.contains).joined(separator: ", ")
       return
     }
-    draft[q.question] = draft[q.question] == label ? nil : label
+    draft[q.answerKey] = draft[q.answerKey] == label ? nil : label
     // 단일 선택은 고르면 다음 질문으로 넘어간다(마지막이면 답 보내기를 기다린다).
-    if draft[q.question] != nil, !isLast { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { index += 1 } }
+    if draft[q.answerKey] != nil, !isLast { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { index += 1 } }
   }
 
   private func icon(_ q: PendingRequest.Question, chosen: Bool) -> String {
@@ -375,7 +377,7 @@ struct RequestCardView: View {
   }
 
   private var answeredCount: Int {
-    questions.filter { draft[$0.question] != nil || !(typed[$0.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }.count
+    questions.filter { draft[$0.answerKey] != nil || !(typed[$0.answerKey] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }.count
   }
 
   /// 입력칸에서 Enter: 마지막 질문이면 보내고, 아니면 다음 질문으로.
@@ -385,9 +387,9 @@ struct RequestCardView: View {
 
   private func send() {
     var answers = draft
-    for q in questions where answers[q.question] == nil {
-      let text = (typed[q.question] ?? "").trimmingCharacters(in: .whitespaces)
-      if !text.isEmpty { answers[q.question] = text }
+    for q in questions where answers[q.answerKey] == nil {
+      let text = (typed[q.answerKey] ?? "").trimmingCharacters(in: .whitespaces)
+      if !text.isEmpty { answers[q.answerKey] = text }
     }
     guard answers.count == questions.count else { return }
     actions.answer(request, answers)

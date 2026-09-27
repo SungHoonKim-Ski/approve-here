@@ -17,6 +17,8 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
     let description: String?
   }
   struct Question: Decodable, Equatable {
+    let id: String?
+    var answerKey: String { id ?? question }
     let question: String
     let header: String?
     let options: [Option]?
@@ -42,6 +44,7 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
 
   var isQuestion: Bool { kind == "question" }
   var isMirror: Bool { mode == "mirror" }
+  var isCodexDirect: Bool { mode == "codex" }
 
   var handoffDate: Date? { handoffAt.flatMap { ISO8601DateFormatter.withFractions.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) } }
 
@@ -97,6 +100,9 @@ enum AnyCodable: Decodable, Equatable {
   }
 }
 
+struct CodexConnectionStatus: Decodable { let connected: Bool; let error: String? }
+struct InboxHealth: Decodable { let codexAppServer: CodexConnectionStatus? }
+
 struct DaemonInfo: Decodable { let port: Int }
 
 final class InboxClient {
@@ -143,6 +149,10 @@ final class InboxClient {
       throw InboxError.http((response as? HTTPURLResponse)?.statusCode ?? -1)
     }
     return data
+  }
+
+  func codexStatus() async throws -> CodexConnectionStatus? {
+    try JSONDecoder().decode(InboxHealth.self, from: try await request("/health")).codexAppServer
   }
 
   func pending() async throws -> [PendingRequest] {

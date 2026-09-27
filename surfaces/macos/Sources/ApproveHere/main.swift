@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
   private var pending: [PendingRequest] = []
   private var known: Set<String> = []
   private var daemonUp = false
+  private var codexStatus: CodexConnectionStatus?
   private var notice: String?
   private var lastEnsureAt = Date.distantPast
   private var timer: Timer?
@@ -98,6 +99,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
       do {
         let next = try await client.pending()
         daemonUp = true
+        codexStatus = try? await client.codexStatus()
         let fresh = next.filter { !known.contains($0.id) }
         known.formUnion(next.map(\.id))
         pending = next
@@ -109,6 +111,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
       } catch {
         daemonUp = false
+        codexStatus = nil
         pending = []
         cards.sync([])
         ensureDaemonIfNeeded()
@@ -151,7 +154,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         entry.representedObject = provider.rawValue
         menu.addItem(entry)
       }
-      if connected.contains(.codex) { menu.addItem(disabled("   Codex는 다음 실행 때 훅 신뢰를 한 번 물어요")) }
+      if connected.contains(.codex) {
+        let state = disabled(codexStatus?.connected == true ? "   Codex 앱·CLI 준비됨" : "   Codex 앱·CLI 연결 대기")
+        state.toolTip = codexStatus?.error
+        menu.addItem(state)
+      }
     }
     menu.addItem(.separator())
 
@@ -188,7 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if (request.questions?.count ?? 0) == 1, !(q.multiSelect ?? false) {
           for option in q.options ?? [] {
             let pick = action("   \(option.label)", #selector(answerOption(_:)))
-            pick.representedObject = [request.id, q.question, option.label]
+            pick.representedObject = [request.id, q.answerKey, option.label]
             if let d = option.description { pick.toolTip = d }
             sub.addItem(pick)
           }
@@ -246,7 +253,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
     do {
       try HookConnections.connect(provider, node: node)
-      notice = provider == .codex ? "Codex 연결됨 — 다음 codex 실행에서 'Hooks need review'가 뜨면 신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
+      notice = provider == .codex ? "Codex 앱·CLI 연결됨 — Codex에서 훅을 검토·신뢰해 주세요" : "Claude Code 연결됨 — 승인·질문이 여기로 옵니다"
       ensureDaemonIfNeeded()
     } catch {
       notice = "설정 파일을 쓰지 못했습니다: \(error.localizedDescription)"

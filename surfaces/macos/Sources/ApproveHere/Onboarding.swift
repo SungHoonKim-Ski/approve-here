@@ -92,7 +92,7 @@ struct OnboardingView: View {
           Button("Node.js 내려받기") { NSWorkspace.shared.open(URL(string: "https://nodejs.org/")!) }.controlSize(.small)
         }
       } else {
-        step(1, "쓰는 CLI를 연결합니다") {
+        step(1, "쓰는 에이전트를 연결합니다") {
           HStack(spacing: 8) {
             ForEach(Provider.allCases, id: \.rawValue) { provider in
               let on = HookConnections.isConnected(provider)
@@ -102,7 +102,7 @@ struct OnboardingView: View {
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
-            Text("Codex는 다음에 codex를 실행할 때 \"Hooks need review\"가 뜨면 신뢰해 주세요.").font(.caption).foregroundStyle(.secondary)
+            Text("Codex 앱·CLI에서 훅을 검토·신뢰해 주세요. tmux 없이도 승인·질문에 답할 수 있습니다.").font(.caption).foregroundStyle(.secondary)
           }
         }
         step(2, "로그인할 때 자동으로 켜지게") {

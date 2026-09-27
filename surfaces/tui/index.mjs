@@ -66,7 +66,7 @@ async function decide(behavior, remember) {
   const target = pending[cursor];
   if (!target) return;
   if (target.kind === 'question') {
-    notice = '질문 카드: 숫자로 옵션을 고르거나 t(터미널에서 답하기)';
+    notice = '질문 카드: 숫자로 옵션을 고르거나 t(원래 화면에서 답하기)';
     return render();
   }
   const body = remember ? { behavior, remember } : { behavior };
@@ -85,11 +85,11 @@ async function pickOption(digit) {
   const target = pending[cursor];
   if (!target || target.kind !== 'question') return;
   const draft = drafts.get(target.id) ?? {};
-  const question = (target.questions || []).find(q => !(q.question in draft));
+  const question = (target.questions || []).find(q => !((q.id ?? q.question) in draft));
   if (!question) return;
   const option = (question.options || [])[digit - 1];
   if (!option) return;
-  const next = { ...draft, [question.question]: option.label };
+  const next = { ...draft, [question.id ?? question.question]: option.label };
   drafts.set(target.id, next);
   if (Object.keys(next).length < (target.questions || []).length) {
     notice = `${question.question} → ${option.label}. 다음 질문의 옵션 번호를 누르세요`;
@@ -110,7 +110,7 @@ async function passthrough() {
   if (!target || target.kind !== 'question') return;
   try {
     await api(`/requests/${target.id}/decision`, { method: 'POST', body: JSON.stringify({ passthrough: true }) });
-    notice = '그 세션 터미널의 다이얼로그로 넘겼습니다';
+    notice = '그 세션의 원래 다이얼로그로 넘겼습니다';
   } catch (error) {
     notice = `실패: ${error.message}`;
   }
@@ -170,7 +170,7 @@ function render() {
     if (r.kind === 'question') {
       const draft = drafts.get(r.id) ?? {};
       for (const q of r.questions || []) {
-        const answered = draft[q.question];
+        const answered = draft[q.id ?? q.question];
         lines.push(`    ${answered ? '✓' : '?'} ${q.question}${answered ? ` → ${answered}` : ''}`.slice(0, width));
         if (!answered) lines.push(`      ${(q.options || []).map((o, n) => `${n + 1}) ${o.label}`).join('   ')}`.slice(0, width));
       }
@@ -187,7 +187,7 @@ function render() {
   }
   lines.push('');
   if (notice) lines.push(`» ${notice}`.slice(0, width));
-  lines.push('a 허용 · d 거부 · r 허용+기억 · 1-9 질문 옵션 · t 터미널로 · g 창으로 · j/k 이동 · q 종료');
+  lines.push('a 허용 · d 거부 · r 허용+기억 · 1-9 질문 옵션 · t 원래 화면으로 · g 창으로 · j/k 이동 · q 종료');
   process.stdout.write('\x1b[2J\x1b[H' + lines.join('\n') + '\n');
 }
 
