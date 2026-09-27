@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 export const HOOK_PATH = fileURLToPath(new URL('../hook/permission-hook.mjs', import.meta.url));
 const MARKER = 'permission-hook.mjs';
@@ -44,18 +45,16 @@ export function install({ claude = false, codex = false, home, userHome = homedi
 }
 
 export function installInto(path, provider, hookPath = HOOK_PATH) {
-  const current = existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : {};
-  const hooks = current.hooks && typeof current.hooks === 'object' ? { ...current.hooks } : {};
+  const current = readForEdit(path);
+  const hooks = { ...current.hooks };
   const command = hookCommand(provider, hookPath);
-  let changed = false;
   for (const { event, matcher } of hookEvents(provider)) {
-    const groups = Array.isArray(hooks[event]) ? hooks[event] : [];
+    const groups = hooks[event] ?? [];
     const ours = { ...(matcher ? { matcher } : {}), hooks: [{ type: 'command', command, timeout: 600 }] };
     const kept = withoutOurs(groups);
-    const already = groups.some(group => (group.hooks || []).some(h => h.command === command) && (group.matcher ?? null) === (matcher ?? null));
     hooks[event] = [...kept, ours];
-    if (!already || kept.length !== groups.length) changed = true;
   }
+  const changed = !isDeepStrictEqual(current.hooks, hooks);
   if (changed) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
@@ -65,20 +64,43 @@ export function installInto(path, provider, hookPath = HOOK_PATH) {
 
 export function uninstallFrom(path) {
   if (!existsSync(path)) return { path, changed: false };
-  const current = JSON.parse(readFileSync(path, 'utf8'));
-  if (!current.hooks || typeof current.hooks !== 'object') return { path, changed: false };
+  const current = readForEdit(path);
+  if (!current.hooks) return { path, changed: false };
   const hooks = { ...current.hooks };
   let changed = false;
   for (const event of ['PermissionRequest', 'PreToolUse', 'PostToolUse']) {
     const groups = hooks[event];
     if (!Array.isArray(groups)) continue;
     const kept = withoutOurs(groups);
-    if (kept.length !== groups.length) changed = true;
+    if (!isDeepStrictEqual(kept, groups)) changed = true;
     if (kept.length) hooks[event] = kept;
     else delete hooks[event];
   }
   if (changed) writeFileSync(path, JSON.stringify({ ...current, hooks }, null, 2) + '\n');
   return { path, changed };
+}
+
+function readForEdit(path) {
+  if (!existsSync(path)) return {};
+  const raw = readFileSync(path, 'utf8');
+  let root;
+  try { root = JSON.parse(raw); }
+  catch (cause) { throw invalidSettings(path, cause); }
+  const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+  if (!object(root)) throw invalidSettings(path);
+  if (Object.hasOwn(root, 'hooks')) {
+    if (!object(root.hooks)) throw invalidSettings(path);
+    for (const groups of Object.values(root.hooks)) {
+      if (!Array.isArray(groups) || !groups.every(group => object(group) && Array.isArray(group.hooks) && group.hooks.every(object))) {
+        throw invalidSettings(path);
+      }
+    }
+  }
+  return root;
+}
+
+function invalidSettings(path, cause) {
+  return new Error(`${path}의 내용을 읽을 수 없어 기존 설정을 보존했습니다. 설정 파일을 확인한 뒤 다시 연결해 주세요.`, { cause });
 }
 
 function withoutOurs(groups) {
