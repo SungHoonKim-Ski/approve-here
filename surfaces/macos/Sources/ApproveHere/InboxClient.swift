@@ -25,6 +25,7 @@ struct PendingRequest: Decodable, Identifiable, Equatable {
 
   let id: String
   let kind: String?
+  let sessionId: String?
   let provider: String
   let project: String?
   let toolName: String

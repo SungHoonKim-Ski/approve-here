@@ -31,8 +31,15 @@ final class CardPanelController {
       panels.removeValue(forKey: id)
     }
     hidden = hidden.intersection(ids)
-    if pending.count <= maxVisible { expanded = false }
-    let visible = expanded ? pending : Array(pending.prefix(maxVisible))
+    // 한 세션은 카드 한 장만 차지한다. 같은 세션의 나머지는 이 카드가 처리된 뒤 차례로 뜬다.
+    var seenSessions = Set<String>()
+    let perSession = pending.filter { request in
+      guard let session = request.sessionId else { return true }
+      return seenSessions.insert(session).inserted
+    }
+    queuedBySession = Dictionary(grouping: pending.filter { $0.sessionId != nil }, by: { $0.sessionId! }).mapValues { $0.count - 1 }
+    if perSession.count <= maxVisible { expanded = false }
+    let visible = expanded ? perSession : Array(perSession.prefix(maxVisible))
     // 접힌 카드는 패널을 내린다(메뉴에는 남는다).
     for request in pending where !visible.contains(where: { $0.id == request.id }) {
       panels[request.id]?.orderOut(nil)
@@ -41,9 +48,12 @@ final class CardPanelController {
     for request in visible where panels[request.id] == nil && !hidden.contains(request.id) {
       panels[request.id] = makePanel(for: request)
     }
-    updateSummary(total: pending.count)
+    updateSummary(total: perSession.count)
     layout(order: (panels["demo"] != nil ? ["demo"] : []) + visible.map(\.id))
   }
+
+  /// 세션별로 이 카드 뒤에 기다리는 요청 수. 카드 머리에 "이 세션에 N건 더"로 보인다.
+  private(set) var queuedBySession: [String: Int] = [:]
 
   /// "N건 더 · 펼치기" / "접기" 한 줄. 카드가 maxVisible을 넘을 때만 보인다.
   private func updateSummary(total: Int) {
@@ -116,7 +126,8 @@ final class CardPanelController {
     panel.isMovableByWindowBackground = true
     panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     panel.hidesOnDeactivate = false
-    let view = RequestCardView(request: request, actions: actions, close: { [weak self] in
+    let queued = request.sessionId.flatMap { queuedBySession[$0] } ?? 0
+    let view = RequestCardView(request: request, queuedInSession: queued, actions: actions, close: { [weak self] in
       guard let self else { return }
       // 질문 카드를 닫는 것은 "여기서 안 답하겠다" — 그 세션의 원래 다이얼로그로 넘긴다. 권한 카드는 숨기기만(메뉴에 남는다).
       if request.isQuestion { actions.passthrough(request) } else if request.id != "demo" { self.hidden.insert(request.id) }
@@ -172,13 +183,18 @@ final class KeyablePanel: NSPanel {
 
 struct RequestCardView: View {
   let request: PendingRequest
+  var queuedInSession: Int = 0
   let actions: CardPanelController.Actions
   let close: () -> Void
   @State private var draft: [String: String] = [:]
   @State private var typed: [String: String] = [:]
+  /// 질문이 여럿이면 하나씩 보인다. 지금 보고 있는 질문 번호.
+  @State private var index = 0
 
   private var questions: [PendingRequest.Question] { request.questions ?? [] }
   private var complete: Bool { !questions.isEmpty && questions.allSatisfy { draft[$0.question] != nil } }
+  private var current: PendingRequest.Question? { questions.indices.contains(index) ? questions[index] : nil }
+  private var isLast: Bool { index >= questions.count - 1 }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -220,7 +236,8 @@ struct RequestCardView: View {
         Text(title).foregroundStyle(.secondary).lineLimit(1)
       }
       Spacer()
-      Text(request.isQuestion ? "질문" : "승인 요청").foregroundStyle(.secondary)
+      if queuedInSession > 0 { Text("이 세션에 \(queuedInSession)건 더").foregroundStyle(.secondary) }
+      Text(request.isQuestion ? (questions.count > 1 ? "질문 \(index + 1)/\(questions.count)" : "질문") : "승인 요청").foregroundStyle(.secondary)
       Button(action: close) { Image(systemName: "xmark").font(.caption) }
         .buttonStyle(.plain).foregroundStyle(.secondary)
         .help(request.isQuestion ? "여기서 답하지 않고 그 세션의 다이얼로그로 넘깁니다" : "카드를 숨깁니다(메뉴에는 남습니다)")
@@ -249,7 +266,7 @@ struct RequestCardView: View {
           .padding(8).frame(maxWidth: .infinity, alignment: .leading)
           .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 8))
       }
-      ForEach(questions, id: \.question) { q in
+      if let q = current {
         VStack(alignment: .leading, spacing: 6) {
           HStack(spacing: 6) {
             if let header = q.header, !header.isEmpty {
@@ -290,12 +307,32 @@ struct RequestCardView: View {
         }
       }
       HStack(spacing: 8) {
-        Button("답 보내기") { send() }.tint(.green).disabled(!readyToSend).keyboardShortcut(.defaultAction)
+        if index > 0 { Button("이전") { index -= 1 } }
+        if isLast {
+          Button("답 보내기") { send() }.tint(.green).disabled(!readyToSend).keyboardShortcut(.defaultAction)
+        } else {
+          Button("다음") { advance() }.disabled(!currentAnswered).keyboardShortcut(.defaultAction)
+        }
         Spacer()
-        Text(questions.count > 1 ? "\(answeredCount)/\(questions.count) 답함" : (readyToSend ? "" : "옵션을 고르거나 직접 입력하세요")).font(.caption).foregroundStyle(.secondary)
+        Text(currentAnswered || readyToSend ? "" : "옵션을 고르거나 직접 입력하세요").font(.caption).foregroundStyle(.secondary)
       }
       .controlSize(.small)
     }
+  }
+
+  /// 지금 질문에 답이 있나(고른 옵션 또는 입력칸 글).
+  private var currentAnswered: Bool {
+    guard let q = current else { return false }
+    return draft[q.question] != nil || !(typed[q.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+  }
+
+  /// 입력칸 글을 답으로 확정하고 다음 질문으로.
+  private func advance() {
+    if let q = current, draft[q.question] == nil {
+      let text = (typed[q.question] ?? "").trimmingCharacters(in: .whitespaces)
+      if !text.isEmpty { draft[q.question] = text }
+    }
+    if !isLast { index += 1 }
   }
 
   private var readyToSend: Bool {
@@ -322,6 +359,8 @@ struct RequestCardView: View {
       return
     }
     draft[q.question] = draft[q.question] == label ? nil : label
+    // 단일 선택은 고르면 다음 질문으로 넘어간다(마지막이면 답 보내기를 기다린다).
+    if draft[q.question] != nil, !isLast { DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { index += 1 } }
   }
 
   private func icon(_ q: PendingRequest.Question, chosen: Bool) -> String {
@@ -332,9 +371,9 @@ struct RequestCardView: View {
     questions.filter { draft[$0.question] != nil || !(typed[$0.question] ?? "").trimmingCharacters(in: .whitespaces).isEmpty }.count
   }
 
-  /// 입력칸에서 Enter: 준비됐으면 보낸다.
+  /// 입력칸에서 Enter: 마지막 질문이면 보내고, 아니면 다음 질문으로.
   private func submitTyped(_ q: PendingRequest.Question) {
-    if readyToSend { send() }
+    if isLast { if readyToSend { send() } } else { advance() }
   }
 
   private func send() {
