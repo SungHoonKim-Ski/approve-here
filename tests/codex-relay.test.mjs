@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { PassThrough } from 'node:stream';
-import { mkdtempSync, mkdirSync, writeFileSync, statSync, symlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, lstatSync, statSync, symlinkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { execFileSync, execFile } from 'node:child_process';
@@ -163,6 +163,59 @@ test('공백·따옴표가 있는 앱 경로에서도 실행기는 별도 앱을
   assert.throws(() => installCodexLauncher({ appPath: app, target: join(root, 'x/../ChatGPT.app'), inspectExecutable: () => 'ChatGPT' }), /별도/);
 });
 
+test('배포 앱의 미리 빌드한 실행기를 복사하고 경로는 JSON 설정으로 보존한다', t => {
+  const root = mkdtempSync(join(tmpdir(), "prebuilt launcher '한글 "));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = join(root, 'ChatGPT.app');
+  mkdirSync(join(app, 'Contents/MacOS'), { recursive: true });
+  mkdirSync(join(app, 'Contents/Resources'), { recursive: true });
+  const appBinary = join(app, 'Contents/MacOS/ChatGPT');
+  const realCli = join(app, 'Contents/Resources/codex');
+  writeFileSync(appBinary, 'original');
+  writeFileSync(realCli, 'original cli');
+  const template = join(root, 'prebuilt-template');
+  writeFileSync(template, 'prebuilt executable bytes');
+  const target = join(root, 'Codex with Approve Here.app');
+  installCodexLauncher({ appPath: app, target, launcherTemplate: template, inspectExecutable: () => 'ChatGPT' });
+  assert.equal(readFileSync(join(target, 'Contents/MacOS/launcher'), 'utf8'), 'prebuilt executable bytes');
+  assert.deepEqual(JSON.parse(readFileSync(join(target, 'Contents/Resources/launcher.json'), 'utf8')), { appBinary, realCli, processName: 'ChatGPT' });
+  assert.ok(statSync(join(target, 'Contents/MacOS/launcher')).mode & 0o111);
+  assert.equal(readFileSync(appBinary, 'utf8'), 'original');
+});
+
+test('실행기 설치 실패는 기존 앱을 보존하고 첫 설치도 다시 시도할 수 있다', t => {
+  const root = mkdtempSync(join(tmpdir(), 'launcher-retry-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = join(root, 'ChatGPT.app');
+  mkdirSync(join(app, 'Contents/MacOS'), { recursive: true });
+  mkdirSync(join(app, 'Contents/Resources'), { recursive: true });
+  writeFileSync(join(app, 'Contents/MacOS/ChatGPT'), 'original');
+  writeFileSync(join(app, 'Contents/Resources/codex'), 'cli');
+  const template = join(root, 'template');
+  writeFileSync(template, 'good template');
+  const brokenTemplate = join(root, 'directory-not-binary');
+  mkdirSync(brokenTemplate);
+  const target = join(root, 'Existing.app');
+  const options = { appPath: app, inspectExecutable: () => 'ChatGPT' };
+  installCodexLauncher({ ...options, target, launcherTemplate: template });
+  assert.throws(() => installCodexLauncher({ ...options, target, launcherTemplate: brokenTemplate }));
+  assert.equal(readFileSync(join(target, 'Contents/MacOS/launcher'), 'utf8'), 'good template');
+  const first = join(root, 'First.app');
+  assert.throws(() => installCodexLauncher({ ...options, target: first, launcherTemplate: join(root, 'missing-template'), requirePrebuilt: true }), /Approve Here를 다시 내려받아/);
+  assert.equal(existsSync(first), false);
+  assert.throws(() => installCodexLauncher({ ...options, target: first, launcherTemplate: brokenTemplate }));
+  assert.equal(existsSync(first), false);
+  installCodexLauncher({ ...options, target: first, launcherTemplate: template });
+  writeFileSync(template, 'updated template');
+  installCodexLauncher({ ...options, target, launcherTemplate: template });
+  assert.equal(readFileSync(join(target, 'Contents/MacOS/launcher'), 'utf8'), 'updated template');
+  assert.equal(readdirSync(root).some(name => name.startsWith('.approve-here-launcher-')), false);
+  const dangling = join(root, 'Dangling.app');
+  symlinkSync(join(root, 'missing.app'), dangling);
+  assert.throws(() => installCodexLauncher({ ...options, target: dangling, launcherTemplate: template }), /심볼릭/);
+  assert.equal(lstatSync(dangling).isSymbolicLink(), true);
+});
+
 test('앱 도구가 부모 환경을 지워도 설치된 shim은 원래 Codex 실행 파일을 실행한다', () => {
   const root = mkdtempSync(join(tmpdir(), "launcher env '한글 "));
   const app = join(root, 'ChatGPT.app');
@@ -178,6 +231,22 @@ test('앱 도구가 부모 환경을 지워도 설치된 shim은 원래 Codex �
     env: { PATH: process.env.PATH }, encoding: 'utf8',
   });
   assert.equal(result.trim(), 'isolated-cli-version');
+});
+
+test('실행기를 설치한 뒤 Node 경로가 없어져도 원래 Codex CLI로 돌아간다', t => {
+  const root = mkdtempSync(join(tmpdir(), "launcher missing node '한글 "));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const app = join(root, 'ChatGPT.app');
+  mkdirSync(join(app, 'Contents/MacOS'), { recursive: true });
+  mkdirSync(join(app, 'Contents/Resources'), { recursive: true });
+  writeFileSync(join(app, 'Contents/MacOS/ChatGPT'), 'original');
+  const cli = join(app, 'Contents/Resources/codex');
+  writeFileSync(cli, '#!/bin/sh\nprintf "%s\\n" "$@"\n');
+  chmodSync(cli, 0o755);
+  const target = join(root, 'Codex with Approve Here.app');
+  installCodexLauncher({ appPath: app, target, nodePath: join(root, 'removed-node'), inspectExecutable: () => 'ChatGPT' });
+  const output = execFileSync(join(target, 'Contents/MacOS/codex-shim'), ['app-server', '--stdio'], { env: { PATH: '/usr/bin:/bin' }, encoding: 'utf8' });
+  assert.equal(output, 'app-server\n--stdio\n');
 });
 
 test('잘못된 observer JSON은 그 연결만 닫으며 원래 앱과 카드 연결을 유지한다', async t => {

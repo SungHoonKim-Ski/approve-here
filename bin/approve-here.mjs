@@ -46,7 +46,7 @@ const commands = {
   },
   async 'install-codex-launcher'() {
     const { installCodexLauncher } = await import('../core/codex-launcher.mjs');
-    const target = installCodexLauncher({ appPath: flag('--app'), target: flag('--target') });
+    const target = installCodexLauncher({ appPath: flag('--app'), target: flag('--target'), requirePrebuilt: rest.includes('--prebuilt') });
     console.log(`중계 실행기 설치: ${target}\nCodex 앱을 완전히 종료한 뒤 이 실행기를 여세요. 원래 앱으로 열면 기존 실행 방식으로 돌아갑니다.`);
   },
   async pending() {
