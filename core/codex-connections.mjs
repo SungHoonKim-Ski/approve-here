@@ -19,7 +19,13 @@ export function startCodexConnections(options) {
   return {
     get status() {
       const connected = all().some(b => b.status.connected);
-      return { connected, relayCount: [...relays.values()].filter(b => b.status.connected).length, error: connected ? null : all().find(b => b.status.error)?.status.error ?? null };
+      return {
+        connected,
+        sharedConnected: shared.status.connected,
+        sharedError: shared.status.error,
+        relayCount: [...relays.values()].filter(b => b.status.connected).length,
+        error: connected ? null : all().find(b => b.status.error)?.status.error ?? null,
+      };
     },
     ownsSession: id => all().some(b => b.ownsSession(id)),
     reviewerFor: id => all().find(b => b.ownsSession(id))?.reviewerFor(id) ?? null,

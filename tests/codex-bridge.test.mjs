@@ -77,6 +77,15 @@ async function boot(t, config = {}, approvalsReviewer = 'user', unresumable = fa
   };
 }
 
+test('CLI 공유 서버 연결은 앱 중계 연결과 구분해서 표시한다', async t => {
+  const b = await boot(t);
+  const { codexAppServer: status } = (await b.api('/health')).body;
+  assert.equal(status.connected, true);
+  assert.equal(status.sharedConnected, true);
+  assert.equal(status.sharedError, null);
+  assert.equal(status.relayCount, 0);
+});
+
 test('Codex app·CLI 승인은 tmux 없이 원래 request ID로 응답하고 앞으로 자동을 저장한다', async t => {
   const b = await boot(t);
   assert.deepEqual(b.resumed[0], { threadId: 'app-thread', excludeTurns: true }, '세션 설정을 바꾸지 않는다');
