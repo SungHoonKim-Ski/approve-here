@@ -52,6 +52,21 @@ test('stdio 앱 대화의 질문 답변이 원래 서버로 돌아가고 앱 응
   assert.match(b.output(), /requestUserInput/);
 });
 
+test('stdio 앱의 현재 턴이 나 대신 승인으로 바뀌면 user permission 카드는 만들지 않는다', async t => {
+  const b = await boot(t);
+  b.client({ id: 'turn-start', method: 'turn/start', params: { threadId: 'desktop', approvalsReviewer: 'auto_review' } });
+  b.server({ id: 'turn-start', result: { turn: { id: 'turn' } } });
+  await until(() => b.api('/codex?sessionId=desktop'), r => r.body.approvalsReviewer === 'auto_review');
+  b.server({ id: 90, method: 'item/permissions/requestApproval', params: { threadId: 'desktop', turnId: 'turn', permissions: { fileSystem: { write: ['/tmp/example'] } } } });
+  b.server(question(91));
+  const [card] = await until(b.pending, list => list.length === 1);
+  assert.equal(card.kind, 'question');
+  assert.match(b.output(), /item\/permissions\/requestApproval/, '원래 앱으로 요청은 그대로 전달한다');
+  assert.equal(b.native.filter(m => m.id === 90).length, 0, '중계기가 권한 응답을 대신 내리지 않는다');
+  assert.equal((await b.decide(card.id, { answers: { 'question-id': '예' } })).code, 200);
+  assert.deepEqual(b.native.find(m => m.id === 91).result, { answers: { 'question-id': { answers: ['예'] } } });
+});
+
 test('원래 앱에서 먼저 답하면 카드는 정리되고 늦은 카드 응답은 거절한다', async t => {
   const b = await boot(t); b.server(question());
   const [card] = await until(b.pending, list => list.length === 1);
