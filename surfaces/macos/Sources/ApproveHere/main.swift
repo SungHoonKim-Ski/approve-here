@@ -38,6 +38,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     let others = NSRunningApplication.runningApplications(withBundleIdentifier: Bundle.main.bundleIdentifier ?? "").filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
     if !others.isEmpty {
       Runtime.log("another instance running (\(others.map(\.processIdentifier))) — quitting \(Bundle.main.bundlePath)")
+      let alert = NSAlert()
+      alert.alertStyle = .informational
+      alert.messageText = "Approve Here가 이미 실행 중입니다"
+      alert.informativeText = "메뉴바의 앱을 사용하거나 ⌥⇧A로 메뉴를 여세요. 이 사본을 열려면 실행 중인 앱의 메뉴에서 ‘종료’를 선택한 뒤 다시 여세요."
+      alert.addButton(withTitle: "확인")
+      NSApp.activate(ignoringOtherApps: true)
+      alert.runModal()
       NSApp.terminate(nil)
       return
     }
