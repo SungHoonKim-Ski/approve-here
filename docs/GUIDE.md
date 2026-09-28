@@ -4,7 +4,7 @@ Mac에서 Claude Code나 Codex를 쓰는데, 터미널 창을 찾아다니며 "�
 
 ## 1. 내려받아 설치
 
-[Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)에서 ApproveHere.dmg를 내려받아 엽니다. 창 안에 순서가 그려져 있습니다. 앱을 Applications 폴더로 끌어 넣습니다.
+Apple Silicon Mac(macOS 13 이상)에서 [Release](https://github.com/SungHoonKim-Ski/approve-here/releases/latest)의 ApproveHere.dmg를 내려받아 엽니다. Intel Mac용 빌드는 없습니다. 창 안에 순서가 그려져 있습니다. 앱을 Applications 폴더로 끌어 넣습니다.
 
 ![DMG](guide/dmg.png)
 
@@ -40,7 +40,7 @@ Applications에서 Approve Here를 엽니다. Apple 서명과 공증이 없는 �
 
 Codex는 새 훅을 처음 만나면 신뢰 확인을 요구합니다. 연결을 켠 뒤 처음 `codex`를 실행하면 "Hooks need review"가 뜨는데, Trust all and continue를 고르면 됩니다.
 
-Codex 앱(ChatGPT 앱 안의 Codex)의 App Server 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 시작 안내의 **Codex 앱 실행기 설치**를 누르고, Codex를 완전히 종료한 뒤 **설치된 실행기 보기**를 눌러 Codex with Approve Here로 앱을 엽니다. 설치 중이거나 실패하면 안내 창 안에 상태와 이유가 표시됩니다. 메뉴의 "Codex 앱 중계 실행기 설치…"로도 설치할 수 있습니다. 왜 이 단계가 필요한지와 안 될 때 볼 것은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있습니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다. Codex 앱의 비동기 질문(`request_user_input_async`)은 중계 실행기로 열어도 원래 화면에서 답합니다.
+Codex 데스크톱 앱 연결은 **실험적 기능**이며 이번 릴리스의 검증된 지원 범위 밖입니다. 터미널의 `codex`(CLI)만 쓰면 추가 단계가 없습니다. 앱 연결을 시험하려면 [실험적 Codex 앱 연결](../README.md#codex-앱-연결)을 보세요. Codex 앱의 비동기 질문(`request_user_input_async`)은 중계 실행기로 열어도 원래 화면에서 답합니다.
 
 이 안내는 메뉴바 아이콘 → 시작 안내로 언제든 다시 볼 수 있습니다.
 
@@ -77,11 +77,11 @@ Claude Code나 Codex가 명령을 실행하기 전에 허락을 구하면 화면
 - Claude Code 승인: 카드와 터미널 프롬프트가 함께 뜹니다. 카드에서 답하면 터미널 프롬프트가 닫힙니다.
 - Claude Code 질문, App Server에 연결되지 않은 Codex 승인: 카드가 먼저 뜨고, 20초 안에 답하지 않으면 터미널에 원래 다이얼로그가 뜹니다. 카드에 남은 시간이 보입니다.
 - 같은 경우인데 tmux 안에서 실행 중일 때: 카드와 터미널 다이얼로그가 처음부터 함께 뜹니다. 카드에서 고르면 앱이 그 터미널 다이얼로그에 대신 입력하고, 터미널에서 답하면 카드가 사라집니다. 카드에 "터미널에도 떠 있습니다"라고 적혀 있습니다. 터미널에서 탭을 옮겨 두었거나 일부를 골라 둔 상태여도 앱이 화면을 읽어 카드의 답대로 맞추고, 맞출 수 없으면 카드에 터미널에서 답하라고 알립니다. Claude Code 질문과 Codex 승인 모두 실제 세션으로 확인했습니다(Codex 거부는 Esc라서 Codex가 "다르게 지시해 달라"는 중단으로 받습니다).
-- Codex CLI(공유 App Server)와 중계 실행기로 연 Codex 앱의 승인과 질문: 카드와 원래 화면에 함께 뜹니다. 카드의 허용·거부·질문 답변은 원래 요청에 직접 전달하며, 원래 화면에서 먼저 답하면 카드가 사라집니다.
+- Codex CLI(공유 App Server)의 승인과 동기 질문: 카드와 원래 화면에 함께 뜹니다. 카드의 허용·거부·질문 답변은 원래 요청에 직접 전달하며, 원래 화면에서 먼저 답하면 카드가 사라집니다. Codex 앱 중계의 동일 동작은 아직 실사용 E2E가 완료되지 않았습니다.
 
 ## 5. 질문 카드
 
-Claude Code(`AskUserQuestion`)나 Codex 앱·CLI(`request_user_input`)가 물을 때는 질문 카드가 뜨고 소리가 납니다.
+Claude Code(`AskUserQuestion`)나 Codex CLI(`request_user_input`)가 물을 때는 질문 카드가 뜨고 소리가 납니다. Codex 앱의 질문 카드는 아직 실험적입니다.
 
 ![질문 카드](guide/card-question.png)
 
@@ -111,8 +111,8 @@ Claude는 카드에서 고른 답을 그대로 받습니다. 터미널에는 "Us
 Claude Code   연결됨 ✓        ← 눌러서 켜고 끔
 Codex         연결됨 ✓
    Codex CLI 질문 연결됨      ← CLI 공유 서버에 붙었는지
-   Codex 앱 연결됨 (1개)       ← 중계 실행기로 연 Codex 앱 수
-Codex 앱 중계 실행기 설치…
+   Codex 앱 실험적 연결 (1개)  ← 중계 실행기로 연 Codex 앱 수
+Codex 앱 중계 실행기 설치… (실험적)
 ──────────────
 (대기 중인 요청 목록)         ← 카드를 닫았어도 여기서 답할 수 있음
 ──────────────
