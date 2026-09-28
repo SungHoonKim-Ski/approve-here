@@ -14,7 +14,7 @@ enum Provider: String, CaseIterable {
       : URL(fileURLWithPath: ProcessInfo.processInfo.environment["CODEX_HOME"] ?? home.appendingPathComponent(".codex").path).appendingPathComponent("hooks.json")
   }
 
-  /// Claude 질문은 PreToolUse, Codex 앱·CLI 질문은 코어의 App Server 연결로 받는다.
+  /// Claude 질문은 PreToolUse, Codex CLI 질문은 코어의 App Server 연결로 받는다. Codex 앱 중계는 실험적이다.
   /// PostToolUse는 "터미널에서 답했다"는 신호 — 양쪽에 떠 있던 카드를 지운다.
   var events: [(event: String, matcher: String?)] {
     self == .claude

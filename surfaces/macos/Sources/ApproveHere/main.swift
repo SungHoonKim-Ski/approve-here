@@ -244,8 +244,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         state.toolTip = codexStatus?.sharedError ?? codexStatus?.error
         menu.addItem(state)
         let appConnections = codexStatus?.relayCount ?? 0
-        menu.addItem(disabled(appConnections > 0 ? "   Codex 앱 연결됨 (\(appConnections)개)" : "   Codex 앱은 실행기로 열어 연결하세요"))
-        menu.addItem(action("Codex 앱 중계 실행기 설치…", #selector(installCodexLauncher)))
+        menu.addItem(disabled(appConnections > 0 ? "   Codex 앱 실험적 연결 (\(appConnections)개)" : "   Codex 앱 연결은 실험적 기능"))
+        menu.addItem(action("Codex 앱 중계 실행기 설치… (실험적)", #selector(installCodexLauncher)))
       }
     }
     menu.addItem(.separator())
@@ -398,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         guard let self else { return }
         self.installingLauncher = false
         let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
-        self.notice = code == 0 ? "실행기 설치 완료. Codex를 완전히 종료한 뒤 ‘설치된 실행기 보기’를 눌러 실행하세요." : "실행기를 설치하지 못했습니다: \(detail.prefix(300))" + (detail.count > 300 ? "\n전체 오류는 기록 폴더의 app.log에서 확인할 수 있습니다." : "")
+        self.notice = code == 0 ? "실험적 실행기 설치 완료. 시험할 때 Codex를 완전히 종료한 뒤 ‘설치된 실행기 보기’를 눌러 실행하세요." : "실행기를 설치하지 못했습니다: \(detail.prefix(300))" + (detail.count > 300 ? "\n전체 오류는 기록 폴더의 app.log에서 확인할 수 있습니다." : "")
         self.render()
         self.onboarding.update(message: self.notice, node: self.node)
       }

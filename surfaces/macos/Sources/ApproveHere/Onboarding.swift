@@ -162,12 +162,12 @@ struct OnboardingView: View {
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
-            Text("Codex를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱의 동기 질문을 받으려면 아래 실행기도 설치해야 합니다. 비동기 질문은 Codex 원래 화면에서 답합니다.").font(.caption).foregroundStyle(.secondary)
-            Button(installingLauncher ? "Codex 실행기 설치 중…" : "Codex 앱 실행기 설치", action: actions.installCodexLauncher)
+            Text("Codex CLI를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱 연결은 실험적이며 아직 실사용 검증이 끝나지 않았습니다. 앱의 비동기 질문은 Codex 원래 화면에서 답합니다.").font(.caption).foregroundStyle(.secondary)
+            Button(installingLauncher ? "Codex 실행기 설치 중…" : "Codex 앱 실행기 설치 (실험적)", action: actions.installCodexLauncher)
               .disabled(installingLauncher || checkingConnection).controlSize(.small)
             if FileManager.default.fileExists(atPath: Runtime.codexLauncher.path) {
               Button("설치된 실행기 보기", action: actions.revealCodexLauncher).controlSize(.small)
-              Text("Codex 앱을 완전히 종료한 뒤, 열린 폴더의 ‘Codex with Approve Here’를 실행하세요. 앞으로도 이 실행기로 Codex를 열어 주세요.")
+              Text("시험할 때만 Codex 앱을 완전히 종료한 뒤 ‘Codex with Approve Here’를 실행하세요. 평소에는 원래 Codex 앱을 사용하세요.")
                 .font(.caption).foregroundStyle(.secondary)
             }
           }
