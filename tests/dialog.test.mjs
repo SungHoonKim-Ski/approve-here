@@ -129,8 +129,9 @@ test('다이얼로그가 없는 화면은 null', () => {
   assert.equal(parseDialog(''), null);
 });
 
-test('질문 비교는 앞 16자만 본다(화면에서 잘리거나 줄이 넘어가도 같은 질문)', () => {
+test('질문 비교는 표시된 전체 접두를 본다(화면에서 잘린 질문은 허용하고 공통 접두 질문은 구분)', () => {
   assert.ok(sameQuestion('금융결제원(2027 상반기)·CJ(2026 하반기, 9/30 마감)는 신입', '금융결제원(2027 상반기)·CJ(2026 하반기, 9/30 마감)는 신입 공채입니다. 기준문서 §4는 신입 공채를 skip으로 봅니다.'));
+  assert.ok(!sameQuestion('AH_CURRENT_123456 selected answer?', 'AH_CURRENT_123456 custom answer?'));
   assert.ok(!sameQuestion('어느 DB?', '어떤 기능?'));
 });
 
@@ -200,6 +201,19 @@ test('초기 상태의 4개 질문 다이얼로그에 답을 넣고 제출한다
   assert.equal(state.closed, true);
   assert.deepEqual(state.accidents, []);
   assert.deepEqual(state.picked, { 0: ['알림', '다크 모드', '자동 저장', '동기화'], 1: ['MySQL'], 2: ['없음'], 3: ['Vercel'] });
+});
+
+test('공통 접두가 긴 두 질문도 각각의 답을 확인하고 제출한다', async () => {
+  const questions = [
+    { question: 'AH_CURRENT_123456 selected answer?', header: 'Selected', options: [{ label: 'Choice A' }, { label: 'Choice B' }] },
+    { question: 'AH_CURRENT_123456 custom answer?', header: 'Custom', options: [{ label: 'Default A' }, { label: 'Default B' }] },
+  ];
+  const { io, state } = simulate(questions);
+  const answers = { [questions[0].question]: 'Choice B', [questions[1].question]: 'Default A' };
+  assert.deepEqual(await answerDialog(io, questions, answers), { ok: true });
+  assert.equal(state.closed, true);
+  assert.deepEqual(state.picked, { 0: ['Choice B'], 1: ['Default A'] });
+  assert.deepEqual(state.accidents, []);
 });
 
 test('사람이 터미널에서 일부를 답하고 셋째 탭까지 옮겨 둔 상태에서도 카드의 답대로 맞춘다 (2026-09-27 사고 재현)', async () => {
