@@ -40,7 +40,7 @@ Applications에서 Approve Here를 엽니다. Apple 서명과 공증이 없는 �
 
 Codex는 새 훅을 처음 만나면 신뢰 확인을 요구합니다. 연결을 켠 뒤 처음 `codex`를 실행하면 "Hooks need review"가 뜨는데, Trust all and continue를 고르면 됩니다.
 
-Codex 앱(ChatGPT 앱 안의 Codex)의 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 시작 안내의 **Codex 앱 실행기 설치**를 누르고, Codex를 완전히 종료한 뒤 **설치된 실행기 보기**를 눌러 Codex with Approve Here로 앱을 엽니다. 설치 중이거나 실패하면 안내 창 안에 상태와 이유가 표시됩니다. 메뉴의 "Codex 앱 중계 실행기 설치…"로도 설치할 수 있습니다. 왜 이 단계가 필요한지와 안 될 때 볼 것은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있습니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다.
+Codex 앱(ChatGPT 앱 안의 Codex)의 App Server 승인·질문까지 카드로 받으려면 한 단계가 더 있습니다. 시작 안내의 **Codex 앱 실행기 설치**를 누르고, Codex를 완전히 종료한 뒤 **설치된 실행기 보기**를 눌러 Codex with Approve Here로 앱을 엽니다. 설치 중이거나 실패하면 안내 창 안에 상태와 이유가 표시됩니다. 메뉴의 "Codex 앱 중계 실행기 설치…"로도 설치할 수 있습니다. 왜 이 단계가 필요한지와 안 될 때 볼 것은 [README의 Codex 앱 연결](../README.md#codex-앱-연결)에 있습니다. 터미널의 `codex`만 쓰면 이 단계는 없습니다. Codex 앱의 비동기 질문(`request_user_input_async`)은 중계 실행기로 열어도 원래 화면에서 답합니다.
 
 이 안내는 메뉴바 아이콘 → 시작 안내로 언제든 다시 볼 수 있습니다.
 
