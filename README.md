@@ -1,6 +1,6 @@
 # Approve Here
 
-Claude Code와 Codex가 "허용할까요?"라고 물을 때, 터미널 창을 찾아다니지 않고 화면 오른쪽 위 카드 한 장으로 답하는 macOS 메뉴바 앱입니다.
+Claude Code와 Codex CLI가 "허용할까요?"라고 물을 때, 터미널 창을 찾아다니지 않고 화면 오른쪽 위 카드 한 장으로 답하는 macOS 메뉴바 앱입니다.
 
 ![승인 카드와 질문 카드](docs/cards.png)
 
