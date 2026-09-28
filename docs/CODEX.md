@@ -39,6 +39,8 @@ Codex에서 새 훅을 검토·신뢰하세요. 공유 App Server에 연결된 �
 
 질문은 문구가 같아도 Codex 질문 ID로 구분합니다. 비밀 입력 질문과 알 수 없는 요청은 원래 화면에서 처리합니다. 질문 카드의 ✕는 Codex에 답을 보내지 않고 카드만 인계합니다.
 
+Codex 앱 기본 모드의 비동기 질문(`request_user_input_async`)은 별도 경로입니다. 실제 연결된 앱 대화에서 이 도구는 즉시 `{"accepted":true}`를 반환하고 Codex 앱 화면에 질문을 표시했지만, App Server의 `item/tool/requestUserInput` 요청을 보내지 않았습니다. Approve Here 대기함에도 요청이 없었고 사용자도 원래 Codex 화면에서만 질문을 확인했습니다. 따라서 **중계 연결됨** 표시는 이 비동기 질문의 카드 지원을 뜻하지 않습니다. 이 질문은 Codex 앱에서 답하세요. 현재 카드로 검증한 질문은 CLI Plan 모드의 동기 `request_user_input`입니다.
+
 Codex CLI 0.157.1에서 `request_user_input` 질문은 Plan 모드에서 확인했습니다. CLI 입력창에 `/plan`을 입력해 전환할 수 있습니다. 기본 모드에서 `request_user_input`이 제공되지 않아 다른 입력 도구로 전환된 질문은 이 경로의 카드로 등록되지 않았습니다. [OpenAI의 Plan 모드 안내](https://developers.openai.com/blog/run-long-horizon-tasks-with-codex)에도 `/plan` 전환 방법이 있습니다.
 
 ## 연결 조건과 확인
@@ -51,7 +53,7 @@ Approve Here가 활성 상태이고 Codex 연결이 켜져 있을 때만 서버�
 
 `approve-here status`로 공유 서버 연결 상태와 앱 중계 연결 수를 확인합니다. **공유 서버만 연결됐다는 표시로 현재 앱 대화까지 연결된 것은 아닙니다.** 별도 stdio 앱의 질문은 중계 실행기로 앱을 열었을 때 연결됩니다. 원래 실행 방식에서는 권한 훅과 “나 대신 승인” 인계가 동작하고 질문은 원래 앱에서 받습니다.
 
-Codex CLI 0.157.1의 실제 공유 서버에서 질문 생성 → 빌드된 앱 코어의 대기함 → 답변 → 모델의 답변 확인까지 검증했습니다. 명령 허용과 거부도 같은 번들에서 검증했으며, 이 CLI에서는 거부가 턴 취소로 표시됐습니다. 아직 실행 기록이 없는 새 세션의 추가 연결 실패는 다른 세션의 연결을 끊지 않습니다. 별도 stdio 서버의 실제 앱 대화에서는 권한 요청이 카드 없이 자동 검토로 인계되는 것을 확인했습니다.
+Codex CLI 0.157.1의 실제 공유 서버에서 질문 생성 → 빌드된 앱 코어의 대기함 → 답변 → 모델의 답변 확인까지 검증했습니다. 명령 허용과 거부도 같은 번들에서 검증했으며, 이 CLI에서는 거부가 턴 취소로 표시됐습니다. 아직 실행 기록이 없는 새 세션의 추가 연결 실패는 다른 세션의 연결을 끊지 않습니다. 별도 stdio 서버의 실제 앱 대화에서는 권한 요청이 카드 없이 자동 검토로 인계되는 것을 확인했습니다. Codex 앱 비동기 질문은 원래 화면에만 표시되는 것도 확인했습니다. 앱의 동기 질문을 카드에서 답하는 실제 E2E는 아직 확인하지 못했습니다.
 
 Node 테스트는 App Server의 Unix 소켓·WebSocket·JSON RPC와 원래 stdio의 응답 경합·취소·연결 종료를 검증합니다. App Server API와 앱의 실행 파일 지정 방식은 버전에 따라 바뀔 수 있습니다. 근거: [공식 App Server 문서](https://learn.chatgpt.com/docs/app-server), [실행 중인 세션의 추가 연결과 대기 요청 재전송](https://github.com/openai/codex/blob/main/codex-rs/app-server/src/request_processors/thread_lifecycle.rs), [로컬 소켓 WebSocket 전송](https://github.com/openai/codex/blob/main/codex-rs/app-server-transport/src/transport/unix_socket.rs).
 

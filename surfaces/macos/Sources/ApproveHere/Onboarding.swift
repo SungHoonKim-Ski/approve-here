@@ -162,7 +162,7 @@ struct OnboardingView: View {
           }
           .controlSize(.small)
           if HookConnections.isConnected(.codex) {
-            Text("Codex를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱의 질문을 받으려면 아래 실행기도 설치해야 합니다.").font(.caption).foregroundStyle(.secondary)
+            Text("Codex를 다시 시작하고 훅을 검토·신뢰해 주세요. Codex 앱의 동기 질문을 받으려면 아래 실행기도 설치해야 합니다. 비동기 질문은 Codex 원래 화면에서 답합니다.").font(.caption).foregroundStyle(.secondary)
             Button(installingLauncher ? "Codex 실행기 설치 중…" : "Codex 앱 실행기 설치", action: actions.installCodexLauncher)
               .disabled(installingLauncher || checkingConnection).controlSize(.small)
             if FileManager.default.fileExists(atPath: Runtime.codexLauncher.path) {
