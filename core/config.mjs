@@ -59,7 +59,7 @@ export function loadConfig(home = inboxHome()) {
 
 export function saveConfig(home, config) {
   ensureHome(home);
-  writeFileSync(join(home, 'config.json'), JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+  replaceFile(join(home, 'config.json'), JSON.stringify(config, null, 2) + '\n');
 }
 
 export function readToken(home = inboxHome()) {
@@ -94,5 +94,5 @@ export function readDaemonInfo(home = inboxHome()) {
 
 export function writeDaemonInfo(home, info) {
   ensureHome(home);
-  writeFileSync(join(home, 'daemon.json'), JSON.stringify(info, null, 2) + '\n', { mode: 0o600 });
+  replaceFile(join(home, 'daemon.json'), JSON.stringify(info, null, 2) + '\n');
 }
