@@ -65,12 +65,11 @@ export function parseDialog(text) {
 
 const normalize = s => String(s ?? '').replace(/\s+/g, ' ').trim();
 
-/** 화면의 질문 줄은 길면 잘리거나 넘어간다. 앞 16자만 맞으면 같은 질문으로 본다. */
+/** 화면의 질문 줄은 길면 잘리거나 넘어간다. 표시된 전체 접두가 일치해야 같은 질문이다. */
 export function sameQuestion(shown, question) {
   const a = normalize(shown), b = normalize(question);
   if (!a || !b) return false;
-  const head = b.slice(0, 16);
-  return a.startsWith(head) || b.startsWith(a.slice(0, 16));
+  return a.startsWith(b) || b.startsWith(a);
 }
 
 /**
@@ -128,9 +127,11 @@ export async function answerDialog(io, questions, answers) {
 
   // Submit 탭. 화면의 답 목록이 카드의 답과 같을 때만 보낸다. 2(Cancel)는 어떤 경우에도 누르지 않는다.
   if (!dialog.review || dialog.unanswered) return { ok: false, reason: 'review-incomplete' };
-  for (const q of questions) {
-    const shown = dialog.reviewAnswers.find(r => sameQuestion(r.question, q.question));
-    if (!shown || normalize(shown.answer) !== normalize(answers[q.question])) return { ok: false, reason: `review-mismatch:${normalize(q.question).slice(0, 20)}` };
+  if (dialog.reviewAnswers.length !== questions.length) return { ok: false, reason: 'review-count' };
+  for (const [index, q] of questions.entries()) {
+    const shown = dialog.reviewAnswers[index];
+    if (!shown || !sameQuestion(shown.question, q.question)) return { ok: false, reason: `review-question:${index}` };
+    if (normalize(shown.answer) !== normalize(answers[q.question])) return { ok: false, reason: `review-mismatch:${normalize(q.question).slice(0, 20)}` };
   }
   if (!dialog.submit) return { ok: false, reason: 'no-submit' };
   await io.send(String(dialog.submit));
